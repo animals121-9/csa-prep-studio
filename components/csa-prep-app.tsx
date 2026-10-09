@@ -91,7 +91,8 @@ export default function CsaPrepApp() {
       <div className="mx-auto flex max-w-[1560px]">
         <aside className="app-sidebar sticky top-0 hidden h-screen w-72 shrink-0 border-r border-border/70 bg-sidebar px-4 py-5 lg:flex lg:flex-col">
           <Brand />
-          <nav className="mt-8 space-y-1">
+          <p className="studio-nav-label">YOUR WORKSPACE</p>
+          <nav className="space-y-1" aria-label="Main navigation">
             {NAV.map(item => {
               const Icon = item.icon
               const active = view === item.label
@@ -124,13 +125,7 @@ export default function CsaPrepApp() {
 
           {notice && <div className="mx-4 mt-4 flex items-start justify-between rounded-lg border border-[#DADCE0] bg-white px-4 py-3 text-sm text-foreground sm:mx-8"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X className="size-4" /></button></div>}
 
-          {view !== 'Dashboard' && (
-            <div className="section-back-wrap">
-              <button onClick={goBack} className="section-back-button">
-                <ArrowLeft className="size-4" /> Back
-              </button>
-            </div>
-          )}
+          <div className="studio-topbar"><div><span>Workspace</span><ChevronRight className="size-3" /><strong>{view}</strong></div>{view !== 'Dashboard' && <button onClick={goBack} className="studio-back" aria-label="Go to previous section"><ArrowLeft className="size-4" /> Previous</button>}</div>
 
           {view === 'Dashboard' && <Dashboard data={data} readiness={readiness} average={average} competencyStats={competencyStats} go={go} />}
           {view === 'Practice' && <PracticeLab data={data} updateData={updateData} setNotice={setNotice} seedQuestionId={practiceSeed} onSeedConsumed={() => setPracticeSeed(null)} />}
@@ -168,8 +163,8 @@ function Shell({
 }) {
   return (
     <section className="app-page">
-      {title && <header className="studio-page-heading"><p>{eyebrow}</p><h1>{title}</h1>{subtitle && <div>{subtitle}</div>}</header>}
-      {action && (
+      {title && <header className="studio-header-row"><div className="studio-page-heading"><p>{eyebrow}</p><h1>{title}</h1>{subtitle && <div>{subtitle}</div>}</div>{action && <div className="studio-header-action">{action}</div>}</header>}
+      {action && !title && (
         <div className="page-toolbar">
           {action}
         </div>
@@ -189,7 +184,7 @@ function ProgressBar({ value, className = '' }: { value: number; className?: str
 function Dashboard({ data, readiness, average, competencyStats, go }: any) {
   const weak = competencyStats[0]
   const speakingAvg = data.speakingResults.length ? Math.round(data.speakingResults.slice(0, 8).reduce((s: number, r: SpeakingResult) => s + r.score, 0) / Math.min(8, data.speakingResults.length)) : 0
-  return <Shell eyebrow="Training dashboard" title="Know what to practice next." subtitle="A role-specific prep workspace for customer judgment, interview stories, spontaneous speaking and communication quality.">
+  return <Shell eyebrow="Training dashboard" title="A little practice. Real progress." subtitle="Your workspace for customer judgment, clear interview answers and confident speaking.">
     <div className="studio-welcome"><div><span className="studio-eyebrow">YOUR DAILY PRACTICE SPACE</span><h2>Small sessions.<br />Stronger conversations.</h2><p>Build sound judgment, find your own words, and practice saying them aloud.</p><button className="btn-primary" onClick={() => go('Practice')}>Start a practice session <ChevronRight className="size-4" /></button></div><div className="studio-welcome-aside"><BookOpen className="size-7" /><strong>{questions.length}</strong><span>guided prompts</span><p>{scenarioItems.length} customer situations<br />{workStyleItems.length} work-style pairs</p><button onClick={() => go('Question Bank')}>Explore the bank →</button></div></div>
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <MetricCard icon={Gauge} label="Readiness" value={data.history.length ? `${readiness}%` : '—'} note="Recent practice + volume" className="metric-indigo" />
@@ -379,7 +374,7 @@ function PracticeLab({
   }
 
   return (
-    <Shell title="Practice one clear answer at a time." eyebrow="Guided practice" subtitle="Read the prompt, write your own answer, then use the review to improve it."
+    <Shell title="Make every answer clearer." eyebrow="Guided practice" subtitle="Read the question, respond in your own words, then review what to improve."
       action={
         <button onClick={createSet} disabled={loading} className="btn-secondary">
           <RefreshCcw className="size-4" /> New set
@@ -439,6 +434,8 @@ function QuestionWorkspace({
         {question.context && <p className="final-practice-context">{question.context}</p>}
 
         <textarea
+          aria-label="Your answer"
+          disabled={loading}
           value={answer}
           onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setAnswer(e.target.value)}
           placeholder="Write what you would actually say. Keep it clear, natural and specific."
@@ -451,13 +448,14 @@ function QuestionWorkspace({
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setAnswer('')}
+              disabled={loading || !answer.trim()}
               className="btn-secondary"
             >
               Clear
             </button>
-            <button disabled={loading} onClick={submit} className="btn-primary">
+            <button disabled={loading || answer.trim().length < 20} onClick={submit} className="btn-primary">
               <WandSparkles className="size-4" />
-              {loading ? 'Checking…' : 'Submit answer'}
+              {loading ? 'Reviewing your answer…' : 'Review answer'}
             </button>
           </div>
         </div>
@@ -634,7 +632,7 @@ function QuestionBank({
   }
 
   return (
-    <Shell>
+    <Shell eyebrow="Question library" title="Find your next question." subtitle="Browse original practice prompts. Save useful ones and build confidence one answer at a time.">
       <div className="final-bank-toolbar">
         <label className="final-bank-search">
           <Search className="size-4" />
@@ -657,7 +655,7 @@ function QuestionBank({
       <div className="studio-bank-filters"><select aria-label="Question category" value={category} onChange={e => setCategory(e.target.value)}><option value="all">All categories</option>{Object.entries(CATEGORY_LABELS).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select><select aria-label="Question difficulty" value={difficulty} onChange={e => setDifficulty(e.target.value)}><option value="all">All levels</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select><button className="btn-secondary" aria-pressed={unpracticed} onClick={() => setUnpracticed(value => !value)}>Unpracticed only</button><button className="studio-text-button" onClick={() => { setQuery(''); setCategory('all'); setDifficulty('all'); setFavoritesOnly(false); setUnpracticed(false) }}>Clear filters</button></div>
       <div className="final-bank-heading">
         <div>
-          <h1>Question Bank</h1>
+          <h2>Practice prompts</h2>
           <p>{filtered.length} of {questions.length} questions</p>
         </div>
       </div>
@@ -830,7 +828,7 @@ function AssessmentLab({ data, updateData }: { data: Persisted; updateData: (fn:
 
   if (!current || finished) {
     return (
-      <Shell>
+      <Shell eyebrow="Assessment" title="Practice your judgment." subtitle="Choose a format, read carefully, and understand the reasoning behind each decision.">
         {finished && (
           <section className="evaluation-report evaluation-report-assessment final-assessment-result">
             <div className="report-header"><div><p className="report-kicker">Assessment complete</p><div className="report-score-line"><strong>{tab === 'simulation' ? average : Object.keys(workChoices).length}</strong><span>{tab === 'simulation' ? '/100' : `/${workSession.length}`}</span></div><p className="report-verdict">{tab === 'simulation' ? 'Use this as a coaching signal for customer judgment, not as an Amazon score prediction.' : 'You completed the work-style set. There is no fake right-or-wrong personality score here.'}</p></div><div className="report-meta"><span>{tab === 'simulation' ? `${session.length} situations` : `${workSession.length} choices`}</span><span>{tab === 'simulation' ? 'Original practice' : 'Answer authentically'}</span></div></div>
@@ -839,10 +837,6 @@ function AssessmentLab({ data, updateData }: { data: Persisted; updateData: (fn:
         )}
 
         {finished && tab === 'simulation' && <details className="card-surface p-5 mb-6"><summary className="cursor-pointer font-semibold">Review your {session.length} decisions</summary><div className="mt-4 divide-y divide-border">{session.map(item => { const chosen = item.options.find(option => option.id === scenarioChoices[item.id]); const best = item.options.find(option => option.score === 3); return <div key={item.id} className="py-4"><h3 className="text-sm font-semibold">{item.title}</h3><p className="mt-2 text-sm">Your choice: {chosen?.text || 'No choice recorded'}</p><p className="mt-2 text-xs text-muted-foreground">{chosen?.rationale}</p>{chosen?.score !== 3 && <p className="mt-3 text-sm"><strong>Stronger approach:</strong> {best?.text}</p>}</div> })}</div></details>}
-        <div className="final-assessment-heading">
-          <h1>Assessment practice</h1>
-          <p>Practice the two assessment formats separately so it is always clear what you are doing.</p>
-        </div>
 
         <div className="final-assessment-grid">
           <section className="final-assessment-entry final-assessment-customer">
@@ -1114,11 +1108,7 @@ function InterviewLab({
 
   if (!active) {
     return (
-      <Shell>
-        <div className="final-interview-heading">
-          <h1>Interview practice</h1>
-          <p>Keep it simple: practise one question or take a short mixed mock.</p>
-        </div>
+      <Shell eyebrow="Interview" title="Find your own words." subtitle="Practice a single answer or run a short mock. Clear, truthful examples matter more than memorized scripts.">
 
         <div className="final-interview-grid">
           <button onClick={() => begin('single')} className="final-interview-card final-interview-practice">
@@ -1241,13 +1231,13 @@ function SpeakingCoach({ data, updateData, setNotice }: { data: Persisted; updat
 
   function newPrompt() { setPrompt(prompts[Math.floor(Math.random() * prompts.length)]); setTranscript(''); setWords([]); setDuration(0); setElapsed(0); setEvaluation(null); if (audioUrl) { URL.revokeObjectURL(audioUrl); setAudioUrl(null) } }
 
-  return <Shell eyebrow="Speaking coach" title="Record your answer. Measure the delivery." subtitle="Record a short answer. Stopping the recording sends it to Groq for transcription; you can edit the text before requesting coaching." action={<button onClick={newPrompt} disabled={recording || transcribing || evaluating} className="btn-secondary"><RefreshCcw className="size-4" /> New prompt</button>}>
+  return <Shell eyebrow="Speaking coach" title="Speak with more confidence." subtitle="Record a short answer. Stopping the recording sends it to Groq for transcription; you can edit the text before requesting coaching." action={<button onClick={newPrompt} disabled={recording || transcribing || evaluating} className="btn-secondary"><RefreshCcw className="size-4" /> New prompt</button>}>
     <div className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">
     <div className="speaking-workspace p-6 sm:p-8">
-        <div className="flex flex-wrap items-center justify-between gap-3"><select value={language} disabled={recording || transcribing} onChange={(e: ChangeEvent<HTMLSelectElement>) => setLanguage(e.target.value as 'en' | 'hi')} className="rounded-md border border-[#E5E5E5] bg-white px-3 py-1 text-xs font-bold text-[var(--ui-accent)]"><option value="en">English</option><option value="hi">Hindi</option></select><span className="text-sm font-semibold tabular-nums text-[var(--ui-accent)]">{Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}</span></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><select aria-label="Recording language" value={language} disabled={recording || transcribing} onChange={(e: ChangeEvent<HTMLSelectElement>) => setLanguage(e.target.value as 'en' | 'hi')} className="rounded-md border border-[#E5E5E5] bg-white px-3 py-1 text-xs font-bold text-[var(--ui-accent)]"><option value="en">English</option><option value="hi">Hindi</option></select><span className="text-sm font-semibold tabular-nums text-[var(--ui-accent)]">{Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}</span></div>
         <h2 className="final-speaking-prompt">{prompt.prompt}</h2><p className="final-speaking-tip">{prompt.hint}</p>
         <div className="mt-7 flex flex-wrap items-center gap-3">{!recording ? <button onClick={startRecording} disabled={transcribing || evaluating} className="btn-rose"><Mic className="size-4" /> Start recording</button> : <button onClick={stopRecording} className="btn-stop"><CircleStop className="size-4" /> Stop recording</button>}{audioUrl && <audio controls src={audioUrl} className="h-10 max-w-full" />}{transcribing && <span className="text-sm font-semibold text-[var(--ui-accent)]">Transcribing with Whisper…</span>}</div>
-        <label className="mt-7 block text-sm font-semibold">Transcript <span className="font-normal text-muted-foreground">(editable)</span></label><textarea value={transcript} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => { setTranscript(e.target.value); setWords([]) }} placeholder="Your recording transcript will appear here. You can also paste a transcript manually." className="mt-2 min-h-52 w-full rounded-lg border border-[#E5E5E5] bg-white p-4 text-base leading-7 outline-none focus:ring-2 focus:ring-[var(--recording)]/30" />
+        <label className="mt-7 block text-sm font-semibold">Transcript <span className="font-normal text-muted-foreground">(editable)</span></label><textarea aria-label="Speaking transcript" value={transcript} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => { setTranscript(e.target.value); setWords([]) }} placeholder="Your recording transcript will appear here. You can also paste a transcript manually." className="mt-2 min-h-52 w-full rounded-lg border border-[#E5E5E5] bg-white p-4 text-base leading-7 outline-none focus:ring-2 focus:ring-[var(--recording)]/30" />
         <button onClick={analyze} disabled={evaluating || transcribing || transcript.trim().length < 15} className="btn-rose mt-5"><Brain className="size-4" /> {evaluating ? 'Analyzing speech…' : 'Analyze speaking'}</button>
       </div>
 
@@ -1381,7 +1371,7 @@ function StudyPlan({ data, competencyStats, go }: any) {
     { title: 'Interview mock', task: 'Run the 3-question mock and review the answer that felt least natural.', view: 'Interview' as View, tone: 'plan-purple' },
     { title: 'Final polish', task: 'Record a fresh introduction + two weak-area answers. Compare with Day 3.', view: 'Speaking Coach' as View, tone: 'plan-blue' },
   ]
-  return <Shell eyebrow="7-day adaptive plan" title="Train the whole hiring skill set without random grinding." subtitle="Repeat the cycle if you have more time. The plan prioritizes customer judgment, truthful evidence, language comfort and spoken delivery.">
+  return <Shell eyebrow="7-day adaptive plan" title="A clear plan for the week." subtitle="Repeat the cycle if you have more time. The plan prioritizes customer judgment, truthful evidence, language comfort and spoken delivery.">
     <div className="grid gap-4 xl:grid-cols-2">
       {days.map((day, i) => (
         <div key={day.title} className={`plan-card ${day.tone}`}>
