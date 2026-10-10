@@ -136,3 +136,9 @@ textarea::placeholder,input::placeholder {color:#657287;opacity:1;}
  .btn-primary,.btn-secondary,.btn-rose,.btn-stop,.btn-danger {min-height:44px;}
 }
 @media(prefers-reduced-motion:reduce) {*,*::before,*::after {transition:none!important;animation:none!important;scroll-behavior:auto!important;}}
+
+/* Corrections from the rendered-screen review. */
+.final-bank-toolbar {border:0!important;background:transparent!important;padding:0!important;border-radius:0!important;}
+.final-bank-heading > div {width:100%;gap:20px;}
+.final-interview-card {min-height:0!important;}
+.final-interview-card > span:last-child {margin-top:18px!important;}
