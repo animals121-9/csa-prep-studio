@@ -8,6 +8,7 @@ const inputSchema = z.object({
   fillers: z.number().min(0).max(500),
   longPauses: z.number().min(0).max(500),
   language: z.enum(['en', 'hi']).default('en'),
+  pauseMetricsAvailable: z.boolean().default(false),
 })
 
 const outputSchema = z.object({
@@ -53,11 +54,11 @@ export async function POST(request: Request) {
         messages: [
           {
             role: 'system',
-            content: `You are a practical interview speaking coach. The candidate language is ${body.language === 'hi' ? 'Hindi' : 'English'}. Evaluate only what is supported by the transcript and delivery metrics. Do not pretend to measure accent, pronunciation, confidence, volume, or tone from text.\n\nFluency can use WPM, filler count, long-pause count, repetition and sentence flow. Grammar fixes must quote an exact short excerpt from the transcript. Do not invent errors. Prefer natural professional language over fancy vocabulary. Structure and relevance must be specific to the exact prompt.\n\nReturn ONLY JSON with: overall, fluency, grammar, vocabulary, structure, relevance (1-100 integers), conciseFeedback, strengths, improvements, grammarFixes [{original,better,reason}], improvedVersion, nextDrill. 70 means usable with gaps; 80 means strong; 90+ should be rare.`,
+            content: `You are a practical interview speaking coach. The candidate language is ${body.language === 'hi' ? 'Hindi' : 'English'}. Evaluate only what is supported by the transcript and delivery metrics. Do not pretend to measure accent, pronunciation, confidence, volume, or tone from text.\n\nFluency can use WPM, transcript filler count, repetition and sentence flow. Use long-pause count only when explicitly marked available; unavailable does not mean zero pauses. Do not claim smooth delivery, no hesitation or no pauses from a pasted transcript. Grammar fixes must quote an exact short excerpt from the transcript. Do not invent errors. Prefer natural professional language over fancy vocabulary. Simple, accurate everyday vocabulary is a strength; do not lower its score merely for being simple or request vivid adjectives or sensory detail unless the exact topic needs them. Do not invent weaknesses to fill the report. Every improvement must address a specific issue in the sample, not an optional embellishment. Preserve the candidate facts in the improved version; do not add feelings, experiences or claims they did not state. Scores are practice estimates, never employer scores or hiring predictions. Structure and relevance must be specific to the exact prompt.\n\nReturn ONLY JSON with: overall, fluency, grammar, vocabulary, structure, relevance (1-100 integers), conciseFeedback, strengths, improvements, grammarFixes [{original,better,reason}], improvedVersion, nextDrill. 70 means usable with gaps; 80 means strong; 90+ should be rare.`,
           },
           {
             role: 'user',
-            content: `PROMPT:\n${body.prompt}\n\nDELIVERY METRICS:\nDuration ${body.duration.toFixed(1)} sec\nWPM ${body.wpm}\nFillers ${body.fillers}\nLong pauses ${body.longPauses}\n\nTRANSCRIPT:\n${body.transcript}`,
+            content: `PROMPT:\n${body.prompt}\n\nDELIVERY METRICS:\nDuration ${body.duration.toFixed(1)} sec\nWPM ${body.wpm}\nFillers ${body.fillers}\nLong pauses ${body.pauseMetricsAvailable ? body.longPauses : 'unavailable (no usable word timestamps)'}\n\nTRANSCRIPT:\n${body.transcript}`,
           },
         ],
       }),

@@ -1212,7 +1212,7 @@ function SpeakingCoach({ data, updateData, setNotice }: { data: Persisted; updat
     setEvaluating(true)
     try {
       const controller = new AbortController(); const timeout = window.setTimeout(() => controller.abort(), 18000)
-      const res = await fetch('/api/speaking-evaluate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ prompt: prompt.prompt, transcript, duration: Math.max(1, duration || elapsed), wpm: metrics.wordsPerMinute, fillers: metrics.fillerWords, longPauses: metrics.longPauses, language }) }); window.clearTimeout(timeout)
+      const res = await fetch('/api/speaking-evaluate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ prompt: prompt.prompt, transcript, duration: Math.max(1, duration || elapsed), wpm: metrics.wordsPerMinute, fillers: metrics.fillerWords, longPauses: metrics.longPauses, language, pauseMetricsAvailable: words.length > 0 }) }); window.clearTimeout(timeout)
       const payload = await res.json().catch(() => ({})); if (!res.ok) throw new Error(payload.error || 'Speaking analysis failed.')
       setEvaluation(payload.evaluation)
       const result: SpeakingResult = { id: `speak-${Date.now()}`, prompt: prompt.prompt, date: new Date().toISOString(), duration: Math.max(1, duration || elapsed), wpm: metrics.wordsPerMinute, fillers: metrics.fillerWords, longPauses: metrics.longPauses, score: payload.evaluation.overall }
