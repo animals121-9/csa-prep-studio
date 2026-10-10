@@ -151,3 +151,38 @@ textarea:focus { border-color: #2563eb !important; box-shadow: 0 0 0 3px #2563eb
  .final-question-actions { width: 100%; justify-content: flex-end; }
 }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+/* Task-first practice screens: ordinary headings, rows and restrained controls. */
+.studio-page-heading > p { display: none; }
+.studio-page-heading h1 { font-size: 28px; letter-spacing: -.025em; }
+.studio-nav-label { font-size: 10px; letter-spacing: .04em; }
+.practice-menu { border-top: 1px solid #e2e8f0; }
+.practice-menu .quick-action { display: flex; width: 100%; text-align: left; padding: 24px 4px !important; border: 0 !important; border-bottom: 1px solid #e2e8f0 !important; border-radius: 0 !important; background: transparent !important; gap: 20px; }
+.practice-menu .quick-action:hover { background: #f8fafc !important; }
+.practice-menu .quick-action > svg:first-child { width: 22px; height: 22px; }
+.practice-menu .quick-action strong { font-size: 17px; font-weight: 600; }
+.practice-menu .quick-action small { font-size: 13px; margin-top: 5px; }
+.practice-summary { display: flex; flex-wrap: wrap; gap: 20px; padding: 20px 0 32px; font-size: 12px; color: #64748b; }
+.practice-summary button { margin-left: auto; display: flex; align-items: center; gap: 5px; color: #2563eb; }
+.practice-recent { border-top: 1px solid #e2e8f0; padding-top: 24px; }
+.practice-recent h2 { font-size: 16px; font-weight: 600; }
+.practice-recent .studio-text-button { display: flex; align-items: center; gap: 5px; }
+.recent-empty { padding: 24px 0; color: #64748b; font-size: 13px; }
+.recent-row { display: flex; align-items: center; gap: 16px; padding: 20px 0; border-bottom: 1px solid #e8edf4; font-size: 13px; }
+.recent-row > div { flex: 1; min-width: 0; }
+.recent-row p { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.recent-row small { color: #64748b; display: block; margin-top: 6px; }
+.recent-row > span { color: #64748b; white-space: nowrap; }
+.topic-controls { display: flex; gap: 16px; margin-bottom: 24px; }
+.topic-controls label { display: flex; flex-direction: column; gap: 8px; font-size: 12px; font-weight: 600; }
+.topic-controls label:first-child { flex: 1; max-width: 500px; }
+.topic-controls select { padding: 11px 12px; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: 400; width: 100%; }
+.topic-timer { font-size: 26px; font-variant-numeric: tabular-nums; font-weight: 600; color: #172033; }
+.topic-timer small { display: block; font-size: 10px; color: #64748b; font-weight: 400; text-align: right; }
+.topic-tip { margin-top: 16px; font-size: 12px; color: #64748b; }
+.topic-tip summary, .speaking-details > summary { cursor: pointer; }
+.topic-tip p { margin-top: 12px; line-height: 1.8; }
+.topic-finished { margin-top: 16px; font-size: 13px; color: #15803d; }
+.speaking-details > summary { font-size: 13px; padding: 16px 0; color: #475569; }
+.speaking-details .card-surface { border: 0 !important; border-top: 1px solid #e2e8f0 !important; border-radius: 0 !important; padding: 24px 0; box-shadow: none !important; }
+@media (max-width: 767px) { .topic-controls { flex-direction: column; } .topic-controls label:first-child { max-width: none; } .practice-summary button { margin-left: 0; } .practice-menu .quick-action { padding: 20px 4px !important; } }

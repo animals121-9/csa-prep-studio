@@ -14,6 +14,8 @@ import {
 import { createBalancedInterviewMock, getRandomQuestions, questions, type Question } from '@/lib/question-bank'
 import { createScenarioMock, createWorkStyleMock, scenarioItems, workStyleItems, type ScenarioItem, type WorkStyleItem } from '@/lib/assessment'
 
+import { speakingTopics, pickSpeakingTopic, remainingSpeakingSeconds } from '@/lib/speaking-topics'
+
 type View = 'Dashboard' | 'Practice' | 'Question Bank' | 'Assessment' | 'Interview' | 'Speaking Coach' | 'Progress' | 'Study Plan' | 'Settings'
 type HistoryItem = { id: string; questionId: string; question: string; score: number; category: Question['category']; date: string; answer: string; evaluation: Evaluation }
 type SpeakingResult = { id: string; prompt: string; date: string; duration: number; wpm: number; fillers: number; longPauses: number; score: number }
@@ -181,47 +183,20 @@ function ProgressBar({ value, className = '' }: { value: number; className?: str
   return <div className={`h-2.5 overflow-hidden rounded-md bg-muted ${className}`}><div className="h-full rounded-md bg-[var(--ui-accent)] transition-all" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></div>
 }
 
-function Dashboard({ data, readiness, average, competencyStats, go }: any) {
-  const weak = competencyStats[0]
-  const speakingAvg = data.speakingResults.length ? Math.round(data.speakingResults.slice(0, 8).reduce((s: number, r: SpeakingResult) => s + r.score, 0) / Math.min(8, data.speakingResults.length)) : 0
-  return <Shell eyebrow="Training dashboard" title="A little practice. Real progress." subtitle="Your workspace for customer judgment, clear interview answers and confident speaking.">
-    <div className="studio-welcome"><div><span className="studio-eyebrow">YOUR DAILY PRACTICE SPACE</span><h2>Small sessions.<br />Stronger conversations.</h2><p>Build sound judgment, find your own words, and practice saying them aloud.</p><button className="btn-primary" onClick={() => go('Practice')}>Start a practice session <ChevronRight className="size-4" /></button></div><div className="studio-welcome-aside"><BookOpen className="size-7" /><strong>{questions.length}</strong><span>guided prompts</span><p>{scenarioItems.length} customer situations<br />{workStyleItems.length} work-style pairs</p><button onClick={() => go('Question Bank')}>Explore the bank →</button></div></div>
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <MetricCard icon={Gauge} label="Readiness" value={data.history.length ? `${readiness}%` : '—'} note="Recent practice + volume" className="metric-indigo" />
-      <MetricCard icon={Trophy} label="Answer average" value={data.history.length ? `${average}/100` : '—'} note={`${data.history.length} scored answers`} className="metric-cyan" />
-      <MetricCard icon={Mic} label="Speaking" value={data.speakingResults.length ? `${speakingAvg}/100` : '—'} note={`${data.speakingResults.length} recorded drills`} className="metric-rose" />
-      <MetricCard icon={Flame} label="Streak" value={`${data.streak} day${data.streak === 1 ? '' : 's'}`} note="Practice on consecutive days" className="metric-emerald" />
-    </div>
-
-    <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_.9fr]">
-      <div className="card-surface p-6 sm:p-8">
-        <div className="flex items-start justify-between gap-4"><div><p className="text-sm font-semibold text-[var(--ui-accent)]">Today’s highest-value work</p><h2 className="mt-2 text-2xl font-semibold">{weak ? `Improve ${getCompetencyLabel(weak.key)}` : 'Establish your baseline'}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{weak ? `Your tracked ${getCompetencyLabel(weak.key)} score is ${weak.score}/100. Use targeted questions, then record one spoken answer to verify the improvement carries into delivery.` : 'Complete a mixed practice set and one speaking recording. The dashboard will start adapting from there.'}</p></div><Target className="size-7 text-[var(--ui-accent)]" /></div>
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <QuickAction label="Customer drill" sub="Realistic scenario" icon={Headphones} onClick={() => go('Practice')} tone="quick-cyan" />
-          <QuickAction label="Interview mock" sub="3-question mixed mock" icon={Users} onClick={() => go('Interview')} tone="quick-violet" />
-          <QuickAction label="Speaking coach" sub="Record + analyze" icon={Mic} onClick={() => go('Speaking Coach')} tone="quick-rose" />
-        </div>
-      </div>
-
-      <div className="dashboard-reality dashboard-support-panel rounded-lg border border-[#E5E5E5] bg-white p-6 text-foreground sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ui-accent)]">Your training lanes</p>
-        <h2 className="mt-3 text-xl font-semibold">A balanced practice routine.</h2>
-        <div className="mt-5 space-y-4 text-sm leading-6 text-muted-foreground">
-          <p><strong className="text-foreground">Assessment:</strong> judgment, prioritization and authentic work-style choices.</p>
-          <p><strong className="text-foreground">Interview:</strong> clear, natural answers, real examples and short mixed mock practice.</p>
-          <p><strong className="text-foreground">Speaking:</strong> recorded delivery, transcription, fluency, grammar, pace, fillers and pauses.</p>
-        </div>
-      </div>
-    </div>
-
-    <div className="mt-6 card-surface p-6 sm:p-8">
-      <div className="flex items-center justify-between"><div><h2 className="text-lg font-semibold">Recent work</h2><p className="mt-1 text-sm text-muted-foreground">Your latest scored answers and recorded speaking drills.</p></div><button onClick={() => go('Progress')} className="text-sm font-bold text-[var(--ui-accent)]">View progress →</button></div>
-      <div className="mt-5 divide-y divide-border">
-        {data.history.length === 0 && data.speakingResults.length === 0 ? <div className="studio-empty"><BookOpen className="size-6" /><strong>Your first session starts here</strong><p>Try one customer drill. Your answers and reviews will appear here.</p><button className="btn-secondary" onClick={() => go('Practice')}>Try a question <ChevronRight className="size-4" /></button></div> : null}
-        {data.speakingResults.slice(0, 2).map((item: SpeakingResult) => <div key={item.id} className="flex items-center gap-4 py-4"><Mic className="size-4" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{item.prompt}</p><p className="mt-1 text-xs text-muted-foreground">Speaking · {item.wpm} WPM · {new Date(item.date).toLocaleDateString()}</p></div><strong className="text-sm">{item.score}</strong></div>)}
-        {data.history.slice(0, 4).map((item: HistoryItem) => <div key={item.id} className="flex items-center gap-4 py-4"><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{item.question}</p><p className="mt-1 text-xs text-muted-foreground">{new Date(item.date).toLocaleDateString()}</p></div><strong className="text-sm">{item.score}</strong></div>)}
-      </div>
-    </div>
+function Dashboard({ data, go }: any) {
+  return <Shell title="CSA practice" subtitle="Choose a session. Your answers and recordings stay in this browser.">
+    <section className="practice-menu" aria-label="Practice options">
+      <QuickAction label="Speak on a topic" sub="Choose a topic · 2 or 3 minutes" icon={Mic} onClick={() => go('Speaking Coach')} />
+      <QuickAction label="Customer situations" sub="Make a decision and review the explanation" icon={Headphones} onClick={() => go('Assessment')} />
+      <QuickAction label="Mock interview" sub="Three questions with answer feedback" icon={Users} onClick={() => go('Interview')} />
+    </section>
+    <div className="practice-summary"><span>{questions.length} questions</span><span>{scenarioItems.length} customer situations</span><button onClick={() => go('Question Bank')}>Browse questions <ChevronRight className="size-4" /></button></div>
+    <section className="practice-recent">
+      <div className="flex items-center justify-between gap-4"><h2>Recent practice</h2><button className="studio-text-button" onClick={() => go('Progress')}>View progress <ChevronRight className="size-4" /></button></div>
+      {!data.history.length && !data.speakingResults.length && <p className="recent-empty">No sessions yet. Choose an option above to start.</p>}
+      {data.speakingResults.slice(0, 2).map((item: SpeakingResult) => <div key={item.id} className="recent-row"><Mic className="size-4" /><div><p>{item.prompt}</p><small>Speaking · {Math.round(item.duration)} seconds · {new Date(item.date).toLocaleDateString()}</small></div><span>{item.score}/100</span></div>)}
+      {data.history.slice(0, 4).map((item: HistoryItem) => <div key={item.id} className="recent-row"><BookOpen className="size-4" /><div><p>{item.question}</p><small>{new Date(item.date).toLocaleDateString()}</small></div><span>{item.score}/100</span></div>)}
+    </section>
   </Shell>
 }
 
@@ -231,7 +206,7 @@ function MetricCard({ icon: Icon, label, value, note, className }: any) {
 
 function QuickAction({ label, sub, icon: Icon, onClick, tone }: any) {
   return (
-    <button onClick={onClick} className={`quick-action ${tone}`}>
+    <button onClick={onClick} className={`quick-action ${tone || ''}`}>
       <Icon className="size-5 shrink-0" />
 
       <span className="quick-action-copy">
@@ -374,7 +349,7 @@ function PracticeLab({
   }
 
   return (
-    <Shell title="Make every answer clearer." eyebrow="Guided practice" subtitle="Read the question, respond in your own words, then review what to improve."
+    <Shell title="Answer practice" eyebrow="Guided practice" subtitle="Read the question, respond in your own words, then review what to improve."
       action={
         <button onClick={createSet} disabled={loading} className="btn-secondary">
           <RefreshCcw className="size-4" /> New set
@@ -632,7 +607,7 @@ function QuestionBank({
   }
 
   return (
-    <Shell eyebrow="Question library" title="Find your next question." subtitle="Browse original practice prompts. Save useful ones and build confidence one answer at a time.">
+    <Shell eyebrow="Question library" title="Question bank" subtitle="Browse original practice prompts. Save useful ones and build confidence one answer at a time.">
       <div className="final-bank-toolbar">
         <label className="final-bank-search">
           <Search className="size-4" />
@@ -828,7 +803,7 @@ function AssessmentLab({ data, updateData }: { data: Persisted; updateData: (fn:
 
   if (!current || finished) {
     return (
-      <Shell eyebrow="Assessment" title="Practice your judgment." subtitle="Choose a format, read carefully, and understand the reasoning behind each decision.">
+      <Shell eyebrow="Assessment" title="Customer situations & work style" subtitle="Choose a format, read carefully, and understand the reasoning behind each decision.">
         {finished && (
           <section className="evaluation-report evaluation-report-assessment final-assessment-result">
             <div className="report-header"><div><p className="report-kicker">Assessment complete</p><div className="report-score-line"><strong>{tab === 'simulation' ? average : Object.keys(workChoices).length}</strong><span>{tab === 'simulation' ? '/100' : `/${workSession.length}`}</span></div><p className="report-verdict">{tab === 'simulation' ? 'Use this as a coaching signal for customer judgment, not as an Amazon score prediction.' : 'You completed the work-style set. There is no fake right-or-wrong personality score here.'}</p></div><div className="report-meta"><span>{tab === 'simulation' ? `${session.length} situations` : `${workSession.length} choices`}</span><span>{tab === 'simulation' ? 'Original practice' : 'Answer authentically'}</span></div></div>
@@ -1108,7 +1083,7 @@ function InterviewLab({
 
   if (!active) {
     return (
-      <Shell eyebrow="Interview" title="Find your own words." subtitle="Practice a single answer or run a short mock. Clear, truthful examples matter more than memorized scripts.">
+      <Shell eyebrow="Interview" title="Interview practice" subtitle="Practice a single answer or run a short mock. Clear, truthful examples matter more than memorized scripts.">
 
         <div className="final-interview-grid">
           <button onClick={() => begin('single')} className="final-interview-card final-interview-practice">
@@ -1152,8 +1127,10 @@ function InterviewLab({
 }
 
 function SpeakingCoach({ data, updateData, setNotice }: { data: Persisted; updateData: (fn: (p: Persisted) => Persisted) => void; setNotice: (s: string) => void }) {
-  const prompts = useMemo(() => questions.filter(question => question.category === 'extempore'), [])
-  const [prompt, setPrompt] = useState<Question>(() => prompts[Math.floor(Math.random() * prompts.length)])
+  const prompts = speakingTopics
+  const [prompt, setPrompt] = useState(() => pickSpeakingTopic())
+  const [targetSeconds, setTargetSeconds] = useState(120)
+  const [timeUp, setTimeUp] = useState(false)
   const [language, setLanguage] = useState<'en' | 'hi'>('en')
   const [recording, setRecording] = useState(false)
   const [elapsed, setElapsed] = useState(0)
@@ -1171,14 +1148,27 @@ function SpeakingCoach({ data, updateData, setNotice }: { data: Persisted; updat
   const mountedRef = useRef(true)
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; if (recorderRef.current) { recorderRef.current.onstop = null; if (recorderRef.current.state !== 'inactive') recorderRef.current.stop() } streamRef.current?.getTracks().forEach(track => track.stop()) } }, [])
 
-  useEffect(() => { if (!recording) return; const id = window.setInterval(() => setElapsed(Math.round((Date.now() - startedRef.current) / 1000)), 250); return () => clearInterval(id) }, [recording])
+  useEffect(() => {
+    if (!recording) return
+    const tick = () => {
+      const remaining = remainingSpeakingSeconds(startedRef.current, Date.now(), targetSeconds)
+      setElapsed(targetSeconds - remaining)
+      if (remaining === 0) {
+        if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
+        setRecording(false); setTimeUp(true)
+      }
+    }
+    tick()
+    const id = window.setInterval(tick, 250)
+    return () => window.clearInterval(id)
+  }, [recording, targetSeconds])
   useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl) }, [audioUrl])
 
   const metrics = getSpeakingMetrics(transcript, duration || elapsed, words)
   const paceState = metrics.wordsPerMinute === 0 ? '—' : metrics.wordsPerMinute < 105 ? 'slow' : metrics.wordsPerMinute > 175 ? 'fast' : 'good'
 
   async function startRecording() {
-    setEvaluation(null); setTranscript(''); setWords([]); setDuration(0); setElapsed(0)
+    setTimeUp(false); setEvaluation(null); setTranscript(''); setWords([]); setDuration(0); setElapsed(0)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       if (!mountedRef.current) { stream.getTracks().forEach(track => track.stop()); return }
@@ -1229,19 +1219,23 @@ function SpeakingCoach({ data, updateData, setNotice }: { data: Persisted; updat
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Speaking analysis failed.') } finally { setEvaluating(false) }
   }
 
-  function newPrompt() { setPrompt(prompts[Math.floor(Math.random() * prompts.length)]); setTranscript(''); setWords([]); setDuration(0); setElapsed(0); setEvaluation(null); if (audioUrl) { URL.revokeObjectURL(audioUrl); setAudioUrl(null) } }
+  function newPrompt(next = pickSpeakingTopic(prompt.id)) { setPrompt(next); setTimeUp(false); setTranscript(''); setWords([]); setDuration(0); setElapsed(0); setEvaluation(null); if (audioUrl) { URL.revokeObjectURL(audioUrl); setAudioUrl(null) } }
 
-  return <Shell eyebrow="Speaking coach" title="Speak with more confidence." subtitle="Record a short answer. Stopping the recording sends it to Groq for transcription; you can edit the text before requesting coaching." action={<button onClick={newPrompt} disabled={recording || transcribing || evaluating} className="btn-secondary"><RefreshCcw className="size-4" /> New prompt</button>}>
+  return <Shell title="Speak on a topic" subtitle="Choose 2 or 3 minutes. Recording stops at the limit and sends your audio to Groq for transcription." action={<button onClick={() => newPrompt()} disabled={recording || transcribing || evaluating} className="btn-secondary"><RefreshCcw className="size-4" /> Random topic</button>}>
+    <div className="topic-controls">
+      <label>Topic<select aria-label="Speaking topic" value={prompt.id} disabled={recording || transcribing || evaluating} onChange={e => newPrompt(prompts.find(item => item.id === e.target.value)!)}>{prompts.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+      <label>Time limit<select aria-label="Speaking time limit" value={targetSeconds} disabled={recording || transcribing || evaluating} onChange={e => { setTargetSeconds(Number(e.target.value)); setElapsed(0); setTimeUp(false) }}><option value={120}>2 minutes</option><option value={180}>3 minutes</option></select></label>
+    </div>
     <div className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">
     <div className="speaking-workspace p-6 sm:p-8">
-        <div className="flex flex-wrap items-center justify-between gap-3"><select aria-label="Recording language" value={language} disabled={recording || transcribing} onChange={(e: ChangeEvent<HTMLSelectElement>) => setLanguage(e.target.value as 'en' | 'hi')} className="rounded-md border border-[#E5E5E5] bg-white px-3 py-1 text-xs font-bold text-[var(--ui-accent)]"><option value="en">English</option><option value="hi">Hindi</option></select><span className="text-sm font-semibold tabular-nums text-[var(--ui-accent)]">{Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}</span></div>
-        <h2 className="final-speaking-prompt">{prompt.prompt}</h2><p className="final-speaking-tip">{prompt.hint}</p>
+        <div className="flex flex-wrap items-center justify-between gap-3"><select aria-label="Recording language" value={language} disabled={recording || transcribing} onChange={(e: ChangeEvent<HTMLSelectElement>) => setLanguage(e.target.value as 'en' | 'hi')} className="rounded-md border border-[#E5E5E5] bg-white px-3 py-1 text-xs font-bold text-[var(--ui-accent)]"><option value="en">English</option><option value="hi">Hindi</option></select><span className="topic-timer" role="timer" aria-label="Time remaining">{Math.floor(Math.max(0, targetSeconds - elapsed) / 60)}:{String(Math.max(0, targetSeconds - elapsed) % 60).padStart(2, '0')}<small>remaining</small></span></div>
+        <h2 className="final-speaking-prompt">{prompt.prompt}</h2><details className="topic-tip"><summary>Show speaking tips</summary><p>{prompt.hint}</p></details>{timeUp && <p className="topic-finished" role="status">Time is up. Your recording has stopped.</p>}
         <div className="mt-7 flex flex-wrap items-center gap-3">{!recording ? <button onClick={startRecording} disabled={transcribing || evaluating} className="btn-rose"><Mic className="size-4" /> Start recording</button> : <button onClick={stopRecording} className="btn-stop"><CircleStop className="size-4" /> Stop recording</button>}{audioUrl && <audio controls src={audioUrl} className="h-10 max-w-full" />}{transcribing && <span className="text-sm font-semibold text-[var(--ui-accent)]">Transcribing with Whisper…</span>}</div>
         <label className="mt-7 block text-sm font-semibold">Transcript <span className="font-normal text-muted-foreground">(editable)</span></label><textarea aria-label="Speaking transcript" value={transcript} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => { setTranscript(e.target.value); setWords([]) }} placeholder="Your recording transcript will appear here. You can also paste a transcript manually." className="mt-2 min-h-52 w-full rounded-lg border border-[#E5E5E5] bg-white p-4 text-base leading-7 outline-none focus:ring-2 focus:ring-[var(--recording)]/30" />
         <button onClick={analyze} disabled={evaluating || transcribing || transcript.trim().length < 15} className="btn-rose mt-5"><Brain className="size-4" /> {evaluating ? 'Analyzing speech…' : 'Analyze speaking'}</button>
       </div>
 
-      <div className="space-y-4"><div className="card-surface p-6"><div className="flex items-center gap-2"><Gauge className="size-5 text-[var(--accent-primary)]" /><h3 className="font-semibold">Delivery metrics</h3></div><div className="mt-5 grid grid-cols-2 gap-3"><SpeechMetric label="Words" value={metrics.words || '—'} /><SpeechMetric label="Pace" value={metrics.wordsPerMinute ? `${metrics.wordsPerMinute} wpm` : '—'} note={paceState === 'good' ? 'Good range' : paceState === 'slow' ? 'May feel slow' : paceState === 'fast' ? 'May feel rushed' : ''} /><SpeechMetric label="Fillers" value={metrics.fillerWords} note={metrics.words ? `${metrics.fillerRate}% of words` : ''} /><SpeechMetric label="Long pauses" value={metrics.longPauses} note={metrics.longestPause ? `Longest ${metrics.longestPause}s` : 'From word timestamps'} /></div><p className="mt-4 text-xs leading-5 text-muted-foreground">Pause metrics are available when the audio transcription returns word timestamps. Edited/manual transcripts cannot recreate real pauses.</p></div><div className="speaking-guidance p-5 text-sm leading-6 text-muted-foreground"><Volume2 className="size-5 text-[var(--accent-primary)]" /><p className="mt-3"><strong className="text-[var(--accent-primary)]">Useful target:</strong> roughly 120–160 WPM is often comfortable for clear interview speech, but clarity matters more than chasing one number.</p></div></div>
+      <details className="speaking-details" open={Boolean(transcript)}><summary>Delivery details</summary><div className="card-surface p-6"><div className="flex items-center gap-2"><Gauge className="size-5 text-[var(--accent-primary)]" /><h3 className="font-semibold">Delivery metrics</h3></div><div className="mt-5 grid grid-cols-2 gap-3"><SpeechMetric label="Words" value={metrics.words || '—'} /><SpeechMetric label="Pace" value={metrics.wordsPerMinute ? `${metrics.wordsPerMinute} wpm` : '—'} note={paceState === 'good' ? 'Good range' : paceState === 'slow' ? 'May feel slow' : paceState === 'fast' ? 'May feel rushed' : ''} /><SpeechMetric label="Fillers" value={metrics.fillerWords} note={metrics.words ? `${metrics.fillerRate}% of words` : ''} /><SpeechMetric label="Long pauses" value={metrics.longPauses} note={metrics.longestPause ? `Longest ${metrics.longestPause}s` : 'From word timestamps'} /></div><p className="mt-4 text-xs leading-5 text-muted-foreground">Pause metrics are available when the audio transcription returns word timestamps. Edited/manual transcripts cannot recreate real pauses.</p></div><div className="speaking-guidance p-5 text-sm leading-6 text-muted-foreground"><Volume2 className="size-5 text-[var(--accent-primary)]" /><p className="mt-3"><strong className="text-[var(--accent-primary)]">Useful target:</strong> roughly 120–160 WPM is often comfortable for clear interview speech, but clarity matters more than chasing one number.</p></div></details>
     </div>
 
     {evaluation && <SpeakingEvaluation evaluation={evaluation} metrics={metrics} />}
@@ -1371,7 +1365,7 @@ function StudyPlan({ data, competencyStats, go }: any) {
     { title: 'Interview mock', task: 'Run the 3-question mock and review the answer that felt least natural.', view: 'Interview' as View, tone: 'plan-purple' },
     { title: 'Final polish', task: 'Record a fresh introduction + two weak-area answers. Compare with Day 3.', view: 'Speaking Coach' as View, tone: 'plan-blue' },
   ]
-  return <Shell eyebrow="7-day adaptive plan" title="A clear plan for the week." subtitle="Repeat the cycle if you have more time. The plan prioritizes customer judgment, truthful evidence, language comfort and spoken delivery.">
+  return <Shell eyebrow="7-day adaptive plan" title="7-day study plan" subtitle="Repeat the cycle if you have more time. The plan prioritizes customer judgment, truthful evidence, language comfort and spoken delivery.">
     <div className="grid gap-4 xl:grid-cols-2">
       {days.map((day, i) => (
         <div key={day.title} className={`plan-card ${day.tone}`}>
