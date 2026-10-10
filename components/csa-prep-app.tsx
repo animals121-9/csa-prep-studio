@@ -77,6 +77,7 @@ export default function CsaPrepApp() {
   function go(next: View) {
     if (next === view) return
     setView(next)
+    if (next !== 'Speaking Coach') setSpeakingSeed(null)
     setNotice('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -116,7 +117,7 @@ export default function CsaPrepApp() {
 
           {notice && <div className="mx-4 mt-4 flex items-start justify-between rounded-lg border border-[#DADCE0] bg-white px-4 py-3 text-sm text-foreground sm:mx-8"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X className="size-4" /></button></div>}
 
-          <header className="workspace-bar"><div><span>CSA preparation</span><ChevronRight className="size-3.5" /><strong>{VIEW_LABEL[view]}</strong></div><button onClick={() => go('Progress')} className="workspace-activity"><Activity className="size-4" />{data.history.length + data.speakingResults.length} sessions</button></header>
+          <header className="workspace-bar"><div><span>CSA preparation</span><ChevronRight className="size-3.5" /><strong>{VIEW_LABEL[view]}</strong></div><button onClick={() => go('Progress')} className="workspace-activity"><Activity className="size-4" />{data.history.length + data.speakingResults.length} scored {data.history.length + data.speakingResults.length === 1 ? 'answer' : 'answers'}</button></header>
           {(view === 'Practice' || view === 'Interview') && <nav className="answer-tabs" aria-label="Answer practice format"><button aria-current={view === 'Practice' ? 'page' : undefined} onClick={() => go('Practice')}>Written practice</button><button aria-current={view === 'Interview' ? 'page' : undefined} onClick={() => go('Interview')}>Interview & mock</button></nav>}
 
           {view === 'Dashboard' && <Dashboard data={data} readiness={readiness} average={average} competencyStats={competencyStats} go={go} startFirstSession={startFirstSession} />}
@@ -126,7 +127,7 @@ export default function CsaPrepApp() {
           {view === 'Interview' && <InterviewLab data={data} updateData={updateData} setNotice={setNotice} />}
           {view === 'Speaking Coach' && <SpeakingCoach initialSession={speakingSeed} data={data} updateData={updateData} setNotice={setNotice} />}
           {view === 'Progress' && <Progress data={data} readiness={readiness} average={average} competencyStats={competencyStats} reset={reset} go={go} />}
-          {view === 'Study Plan' && <StudyPlan data={data} competencyStats={competencyStats} go={go} />}
+          {view === 'Study Plan' && <StudyPlan data={data} competencyStats={competencyStats} go={go} startFirstSession={startFirstSession} />}
           {view === 'Settings' && <SettingsPanel data={data} reset={reset} restore={next => { setData(next); setStorageWritable(true); setNotice('Backup restored in this browser.') }} />}
         </main>
       </div>
@@ -155,7 +156,7 @@ function Shell({
 }) {
   return (
     <section className="app-page" data-page={title || 'session'}>
-      {title && <header className="studio-header-row"><div className="studio-page-heading"><p>{eyebrow}</p><h1>{title}</h1>{subtitle && <div>{subtitle}</div>}</div>{action && <div className="studio-header-action">{action}</div>}</header>}
+      {title && <header className="studio-header-row"><div className="studio-page-heading"><h1>{title}</h1>{subtitle && <div>{subtitle}</div>}</div>{action && <div className="studio-header-action">{action}</div>}</header>}
       {action && !title && (
         <div className="page-toolbar">
           {action}
@@ -181,7 +182,7 @@ function Dashboard({ data, go, startFirstSession }: any) {
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 3)
   return <Shell eyebrow="Your preparation" title="Prepare for your CSA interview" subtitle="Build clear answers, confident speech and sound customer judgment.">
     <div className="overview-top">
-      <section className="recommended-session"><span className="session-label"><Mic className="size-4" />{total ? 'A quick speaking drill' : 'Recommended starting point'}</span><h2>Start with something<br className="desktop-break" /> you know.</h2><p>Talk through your daily routine for one minute. Review one correction, then try the answer again.</p><div className="session-facts"><span><Clock3 className="size-4" />1-minute recording</span><span>English or Hindi</span></div><button className="btn-primary" onClick={startFirstSession}>Start speaking <ChevronRight className="size-4" /></button></section>
+      <section className="recommended-session"><span className="session-label"><Mic className="size-4" />{total ? 'A quick speaking drill' : 'Recommended starting point'}</span><h2>Talk about your<br className="desktop-break" /> daily routine.</h2><p>Describe your morning, work or studies, and evening. Record for one minute, review a correction, then try again.</p><div className="session-facts"><span><Clock3 className="size-4" />1-minute recording</span><span>English or Hindi</span></div><button className="btn-primary" onClick={startFirstSession}>Start speaking <ChevronRight className="size-4" /></button></section>
       <aside className="overview-plan"><div className="section-heading"><span className="section-label">A simple way to prepare</span><span className="plan-duration">7 days</span></div><ol><li><span>01</span><div><strong>Get comfortable speaking</strong><p>Use familiar topics and your own words.</p></div></li><li><span>02</span><div><strong>Build your interview answers</strong><p>Prepare truthful examples, then try a mock.</p></div></li><li><span>03</span><div><strong>Practise customer decisions</strong><p>Understand the reasoning behind a response.</p></div></li></ol><button onClick={() => go('Study Plan')} className="text-link">Open the study plan <ChevronRight className="size-4" /></button></aside>
     </div>
     <section className="practice-paths"><div className="section-heading"><h2>Choose what to practise</h2><button onClick={() => go('Question Bank')} className="text-link">Browse all questions <ChevronRight className="size-4" /></button></div><div className="practice-path-grid">{[
@@ -548,7 +549,7 @@ function EvaluationCard({ evaluation, question, answer, onNext }: { evaluation: 
   return <section className="review-panel">
     <div className="review-head"><div><p className="review-kicker">Answer review</p><div className="mt-2 flex items-end gap-2"><span className="review-score">{evaluation.overall}</span><span className="pb-1 text-sm font-semibold">/100</span></div><h3 className="mt-3 max-w-3xl text-xl font-semibold leading-8">{evaluation.summary}</h3></div><span className="review-source"><Brain className="size-4" /> Local analysis</span></div>
     <p className="report-context-note">This is an approximate keyword and structure check. It cannot verify relevance, factual accuracy or interview readiness; use it as a checklist, not a hiring score.</p>
-    <div className="report-metrics-grid mt-6">{visibleScores.map(([key, score]) => <ReportMetric key={key} label={getCompetencyLabel(key)} value={score} />)}</div>
+    <details className="feedback-disclosure"><summary>Scores by criterion</summary><div className="report-metrics-grid">{visibleScores.map(([key, score]) => <ReportMetric key={key} label={getCompetencyLabel(key)} value={score} />)}</div></details>
     <div className="report-coaching-grid mt-6"><div className="report-coaching-panel report-positive"><FeedbackList title="What worked" items={evaluation.strengths} /></div><div className="report-coaching-panel report-improve"><FeedbackList title="Improve next" items={[...evaluation.weaknesses, ...evaluation.missingElements]} /></div></div>
     <div className="mt-7 flex flex-wrap gap-3"><button onClick={onNext} className="btn-primary">Next question <ChevronRight className="size-4" /></button><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="btn-secondary">Review prompt</button></div>
   </section>
@@ -1272,7 +1273,7 @@ function Progress({ data, readiness, average, competencyStats, reset, go }: any)
       }
     >
       <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard icon={Gauge} label="Completed" value={data.history.length + data.speakingResults.length} note="Practice sessions" className="metric-indigo" />
+        <MetricCard icon={Gauge} label="Scored answers" value={data.history.length + data.speakingResults.length} note="Written and speaking" className="metric-indigo" />
         <MetricCard icon={BarChart3} label="Average" value={data.history.length ? `${average}/100` : '—'} note={`${data.history.length} answers`} className="metric-cyan" />
         <MetricCard icon={Mic} label="Recorded drills" value={data.speakingResults.length} note="Speaking sessions" className="metric-rose" />
       </div>
@@ -1350,21 +1351,21 @@ function Progress({ data, readiness, average, competencyStats, reset, go }: any)
   )
 }
 
-function StudyPlan({ data, competencyStats, go }: any) {
+function StudyPlan({ data, competencyStats, go, startFirstSession }: any) {
   const weak = competencyStats[0]
-  const days = [
-    { title: 'Baseline + customer judgment', task: 'Complete 3 customer scenarios and 4 assessment simulation items.', view: 'Assessment' as View, tone: 'plan-emerald' },
-    { title: 'Real example practice', task: 'Practice 3 truthful examples: pressure, feedback, and solving a problem.', view: 'Interview' as View, tone: 'plan-violet' },
-    { title: 'Speaking baseline', task: 'Record 3 answers: introduction, familiar topic, and customer scenario.', view: 'Speaking Coach' as View, tone: 'plan-rose' },
-    { title: 'Weak-skill day', task: weak ? `Target ${getCompetencyLabel(weak.key)} with 5 focused questions.` : 'Complete 5 mixed questions to identify your weakest skill.', view: 'Practice' as View, tone: 'plan-cyan' },
-    { title: 'Assessment pressure', task: 'Do all simulation scenarios without checking explanations until you commit.', view: 'Assessment' as View, tone: 'plan-teal' },
-    { title: 'Interview mock', task: 'Run the 3-question mock and review the answer that felt least natural.', view: 'Interview' as View, tone: 'plan-purple' },
-    { title: 'Final polish', task: 'Record a fresh introduction + two weak-area answers. Compare with Day 3.', view: 'Speaking Coach' as View, tone: 'plan-blue' },
+  const days: { title: string; task: string; view: View; action?: () => void }[] = [
+    { title: 'Your first speaking session', task: 'Speak about your daily routine for one minute. Review one correction and record a second attempt.', view: 'Speaking Coach', action: startFirstSession },
+    { title: 'Introduction and real examples', task: 'Practise your introduction and a truthful example of solving a problem or handling pressure.', view: 'Interview' },
+    { title: 'Customer judgment', task: 'Complete a 12-situation practice set. Read the reasoning after each decision.', view: 'Assessment' },
+    { title: 'A longer speaking answer', task: 'Choose a familiar sourced topic and speak for two or three minutes. Compare your clarity and structure.', view: 'Speaking Coach' },
+    { title: 'Improve one weak area', task: weak ? `Review your feedback on ${getCompetencyLabel(weak.key)} and practise a fresh written answer.` : 'Review your earlier feedback and practise a fresh written answer with one improvement.', view: 'Practice' },
+    { title: 'Assessment mock', task: 'Try a 24-item customer-situation mock. Review your decisions after finishing the set.', view: 'Assessment' },
+    { title: 'Interview mock and review', task: 'Run the three-question interview mock, then revisit the answer that needs the most work.', view: 'Interview' },
   ]
-  return <Shell eyebrow="7-day adaptive plan" title="7-day study plan" subtitle="Repeat the cycle if you have more time. The plan prioritizes customer judgment, truthful evidence, language comfort and spoken delivery.">
+  return <Shell eyebrow="7-day adaptive plan" title="7-day study plan" subtitle="One focus each day. Repeat a session whenever you need more practice.">
     <div className="grid gap-4 xl:grid-cols-2">
       {days.map((day, i) => (
-        <div key={day.title} className={`plan-card ${day.tone}`}>
+        <div key={day.title} className="plan-card">
           <div className="flex items-start gap-4">
             <span className="plan-day">{i + 1}</span>
             <div className="min-w-0 flex-1">
@@ -1372,7 +1373,7 @@ function StudyPlan({ data, competencyStats, go }: any) {
               <h3 className="mt-1 text-base font-semibold">{day.title}</h3>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">{day.task}</p>
               <div className="mt-3">
-                <button onClick={() => go(day.view)} className="inline-flex items-center gap-2 text-sm font-semibold">Open drill <ChevronRight className="size-4" /></button>
+                <button onClick={() => day.action ? day.action() : go(day.view)} className="inline-flex items-center gap-2 text-sm font-semibold">Open drill <ChevronRight className="size-4" /></button>
               </div>
             </div>
           </div>
@@ -1405,11 +1406,11 @@ function SettingsPanel({ data, reset, restore }: { data: Persisted; reset: () =>
   async function test() {
     setStatus('testing'); setDetail('')
     const controller = new AbortController(); const timeout = window.setTimeout(() => controller.abort(), 22000)
-    try { const res = await fetch('/api/evaluate', { method: 'GET', signal: controller.signal, cache: 'no-store' }); const payload = await res.json().catch(() => ({})); setStatus(res.ok && payload.configured ? 'ok' : 'error'); setDetail(res.ok && payload.configured ? `Configured: ${payload.provider || 'Groq'} · ${payload.model || 'default model'}.` : payload.error || 'GROQ_API_KEY is not configured on the server.') } catch (error) { setStatus('error'); setDetail(error instanceof Error && error.name === 'AbortError' ? 'Connection test timed out.' : 'Could not reach the server route.') } finally { window.clearTimeout(timeout) }
+    try { const res = await fetch('/api/evaluate', { method: 'GET', signal: controller.signal, cache: 'no-store' }); const payload = await res.json().catch(() => ({})); setStatus(res.ok && payload.configured ? 'ok' : 'error'); setDetail(res.ok && payload.configured ? `AI is configured with ${payload.provider || 'Groq'} · ${payload.model || 'default model'}.` : payload.error || 'GROQ_API_KEY is not configured on the server.') } catch (error) { setStatus('error'); setDetail(error instanceof Error && error.name === 'AbortError' ? 'Connection test timed out.' : 'Could not reach the server route.') } finally { window.clearTimeout(timeout) }
   }
   return <Shell eyebrow="Settings" title="Settings" subtitle="Manage AI access and the practice history saved on this device.">
     <div className="max-w-3xl space-y-5"><div className="card-surface p-6"><div className="flex gap-4"><ShieldCheck className="mt-1 size-5 text-[var(--success)]" /><div><h2 className="font-semibold">Local-first progress</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Scores, answers, favorites and speaking-report summaries are stored in this browser. Stopping a recording automatically sends its audio to the server and Groq for transcription; they are not stored in localStorage by this app.</p></div></div></div>
-      <div className="card-surface p-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-semibold">Groq AI + Whisper</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Groq provides answer feedback and transcribes your recordings.</p></div><span className={`pill ${status === 'ok' ? 'status-success' : status === 'error' ? 'status-error' : status === 'testing' ? 'status-warning' : ''}`}>{status === 'ok' ? 'Connected' : status === 'error' ? 'Unavailable' : status === 'testing' ? 'Testing…' : 'Not tested'}</span></div>{detail && <p className={`mt-4 rounded-lg border p-3 text-sm bg-white ${status === 'error' ? 'border-[var(--error-border)] text-[var(--error)]' : 'border-[var(--success-border)] text-[var(--success)]'}`}>{detail}</p>}<button onClick={test} disabled={status === 'testing'} className="btn-secondary mt-5"><Activity className="size-4" /> Test Groq connection</button></div>
+      <div className="card-surface p-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-semibold">Groq AI + Whisper</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Groq provides answer feedback and transcribes your recordings.</p></div><span className={`pill ${status === 'ok' ? 'status-success' : status === 'error' ? 'status-error' : status === 'testing' ? 'status-warning' : ''}`}>{status === 'ok' ? 'Configured' : status === 'error' ? 'Unavailable' : status === 'testing' ? 'Testing…' : 'Not tested'}</span></div>{detail && <p className={`mt-4 rounded-lg border p-3 text-sm bg-white ${status === 'error' ? 'border-[var(--error-border)] text-[var(--error)]' : 'border-[var(--success-border)] text-[var(--success)]'}`}>{detail}</p>}<button onClick={test} disabled={status === 'testing'} className="btn-secondary mt-5"><Activity className="size-4" /> Check AI configuration</button></div>
       <div className="card-surface p-6"><h2 className="font-semibold">Stored locally</h2><p className="mt-2 text-sm text-muted-foreground">{data.history.length} answer records · {data.speakingResults.length} speaking reports · {data.favorites.length} saved prompts</p><div className="mt-5 flex flex-wrap gap-3"><button onClick={exportBackup} className="btn-secondary">Export backup</button><label className="btn-secondary cursor-pointer">Import backup<input type="file" accept=".json,application/json" className="sr-only" onChange={importBackup} /></label></div>{backupMessage && <p role="status" className="mt-3 text-sm">{backupMessage}</p>}<button onClick={reset} className="btn-danger mt-5"><RotateCcw className="size-4" /> Reset all progress</button></div>
     </div>
   </Shell>
