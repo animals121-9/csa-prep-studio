@@ -1164,7 +1164,7 @@ function SpeakingCoach({ data, updateData, setNotice }: { data: Persisted; updat
   }, [recording, targetSeconds])
   useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl) }, [audioUrl])
 
-  const metrics = getSpeakingMetrics(transcript, duration || elapsed, words)
+  const metrics = { ...getSpeakingMetrics(transcript, duration || elapsed, words), wordsPerMinute: duration || elapsed ? getSpeakingMetrics(transcript, duration || elapsed, words).wordsPerMinute : 0 }
   const paceState = metrics.wordsPerMinute === 0 ? '—' : metrics.wordsPerMinute < 105 ? 'slow' : metrics.wordsPerMinute > 175 ? 'fast' : 'good'
 
   async function startRecording() {
@@ -1208,6 +1208,7 @@ function SpeakingCoach({ data, updateData, setNotice }: { data: Persisted; updat
 
   async function analyze() {
     if (transcript.trim().length < 15) return setNotice('Record or enter a longer speaking sample first.')
+    if (duration < 1 || duration > 900) return setNotice('Enter the speaking duration, between 1 and 900 seconds, for your pasted transcript.')
     setEvaluating(true)
     try {
       const controller = new AbortController(); const timeout = window.setTimeout(() => controller.abort(), 18000)
@@ -1232,7 +1233,8 @@ function SpeakingCoach({ data, updateData, setNotice }: { data: Persisted; updat
         <h2 className="final-speaking-prompt">{prompt.prompt}</h2><details className="topic-tip"><summary>Show speaking tips</summary><p>{prompt.hint}</p></details>{timeUp && <p className="topic-finished" role="status">Time is up. Your recording has stopped.</p>}
         <div className="mt-7 flex flex-wrap items-center gap-3">{!recording ? <button onClick={startRecording} disabled={transcribing || evaluating} className="btn-rose"><Mic className="size-4" /> Start recording</button> : <button onClick={stopRecording} className="btn-stop"><CircleStop className="size-4" /> Stop recording</button>}{audioUrl && <audio controls src={audioUrl} className="h-10 max-w-full" />}{transcribing && <span className="text-sm font-semibold text-[var(--ui-accent)]">Transcribing with Whisper…</span>}</div>
         <label className="mt-7 block text-sm font-semibold">Transcript <span className="font-normal text-muted-foreground">(editable)</span></label><textarea aria-label="Speaking transcript" value={transcript} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => { setTranscript(e.target.value); setWords([]) }} placeholder="Your recording transcript will appear here. You can also paste a transcript manually." className="mt-2 min-h-52 w-full rounded-lg border border-[#E5E5E5] bg-white p-4 text-base leading-7 outline-none focus:ring-2 focus:ring-[var(--recording)]/30" />
-        <button onClick={analyze} disabled={evaluating || transcribing || transcript.trim().length < 15} className="btn-rose mt-5"><Brain className="size-4" /> {evaluating ? 'Analyzing speech…' : 'Analyze speaking'}</button>
+        {!audioUrl && transcript.trim() && <label className="manual-duration">Speaking duration for pasted text (seconds)<input aria-label="Pasted transcript duration" type="number" min="1" max="900" value={duration || ''} onChange={e => setDuration(Number(e.target.value))} /><small>Use the time you actually spoke. Pace is unavailable without it.</small></label>}
+        <button onClick={analyze} disabled={evaluating || transcribing || recording || transcript.trim().length < 15 || duration < 1 || duration > 900} className="btn-rose mt-5"><Brain className="size-4" /> {evaluating ? 'Analyzing speech…' : 'Analyze speaking'}</button>
       </div>
 
       <details className="speaking-details" open={Boolean(transcript)}><summary>Delivery details</summary><div className="card-surface p-6"><div className="flex items-center gap-2"><Gauge className="size-5 text-[var(--accent-primary)]" /><h3 className="font-semibold">Delivery metrics</h3></div><div className="mt-5 grid grid-cols-2 gap-3"><SpeechMetric label="Words" value={metrics.words || '—'} /><SpeechMetric label="Pace" value={metrics.wordsPerMinute ? `${metrics.wordsPerMinute} wpm` : '—'} note={paceState === 'good' ? 'Good range' : paceState === 'slow' ? 'May feel slow' : paceState === 'fast' ? 'May feel rushed' : ''} /><SpeechMetric label="Fillers" value={metrics.fillerWords} note={metrics.words ? `${metrics.fillerRate}% of words` : ''} /><SpeechMetric label="Long pauses" value={metrics.longPauses} note={metrics.longestPause ? `Longest ${metrics.longestPause}s` : 'From word timestamps'} /></div><p className="mt-4 text-xs leading-5 text-muted-foreground">Pause metrics are available when the audio transcription returns word timestamps. Edited/manual transcripts cannot recreate real pauses.</p></div><div className="speaking-guidance p-5 text-sm leading-6 text-muted-foreground"><Volume2 className="size-5 text-[var(--accent-primary)]" /><p className="mt-3"><strong className="text-[var(--accent-primary)]">Useful target:</strong> roughly 120–160 WPM is often comfortable for clear interview speech, but clarity matters more than chasing one number.</p></div></details>

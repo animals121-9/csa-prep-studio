@@ -186,3 +186,7 @@ textarea:focus { border-color: #2563eb !important; box-shadow: 0 0 0 3px #2563eb
 .speaking-details > summary { font-size: 13px; padding: 16px 0; color: #475569; }
 .speaking-details .card-surface { border: 0 !important; border-top: 1px solid #e2e8f0 !important; border-radius: 0 !important; padding: 24px 0; box-shadow: none !important; }
 @media (max-width: 767px) { .topic-controls { flex-direction: column; } .topic-controls label:first-child { max-width: none; } .practice-summary button { margin-left: 0; } .practice-menu .quick-action { padding: 20px 4px !important; } }
+
+.manual-duration { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; font-size: 12px; }
+.manual-duration input { padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; max-width: 180px; }
+.manual-duration small { color: #64748b; }
