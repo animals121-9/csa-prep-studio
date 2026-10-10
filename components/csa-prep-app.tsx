@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import {
   Activity, ArrowLeft, BarChart3, BookOpen, Brain, Check, ChevronRight, CircleStop,
   Clock3, Flame, Gauge, Headphones, LayoutDashboard, ListChecks, Mic,
@@ -14,16 +14,18 @@ import {
 import { createBalancedInterviewMock, getRandomQuestions, questions, type Question } from '@/lib/question-bank'
 import { createScenarioMock, createWorkStyleMock, scenarioItems, workStyleItems, type ScenarioItem, type WorkStyleItem } from '@/lib/assessment'
 
+import { answerFeedbackSchema, speakingFeedbackSchema } from '@/lib/feedback-schema'
 import { speakingTopics, pickSpeakingTopic, remainingSpeakingSeconds } from '@/lib/speaking-topics'
 
 type View = 'Dashboard' | 'Practice' | 'Question Bank' | 'Assessment' | 'Interview' | 'Speaking Coach' | 'Progress' | 'Study Plan' | 'Settings'
 type HistoryItem = { id: string; questionId: string; question: string; score: number; category: Question['category']; date: string; answer: string; evaluation: Evaluation }
-type SpeakingResult = { id: string; prompt: string; date: string; duration: number; wpm: number; fillers: number; longPauses: number; score: number }
-type Persisted = { history: HistoryItem[]; completed: string[]; mockResults: number[]; speakingResults: SpeakingResult[]; favorites: string[]; streak: number; lastPractice: string | null }
+type SpeakingResult = { transcript?: string; evaluation?: SpeakingEval; pauseMetricsAvailable?: boolean; id: string; prompt: string; date: string; duration: number; wpm: number; fillers: number; longPauses: number; score: number }
+type SessionResult = { decisions?: { prompt: string; answer: string; reason?: string; better?: string }[]; id: string; date: string; kind: 'customer-practice' | 'customer-mock' | 'workstyle' | 'interview'; count: number; score?: number }
+type Persisted = { sessions: SessionResult[]; history: HistoryItem[]; completed: string[]; mockResults: number[]; speakingResults: SpeakingResult[]; favorites: string[]; streak: number; lastPractice: string | null }
 type SpeakingEval = { overall: number; fluency: number; grammar: number; vocabulary: number; structure: number; relevance: number; conciseFeedback: string; strengths: string[]; improvements: string[]; grammarFixes: { original: string; better: string; reason: string }[]; improvedVersion: string; nextDrill: string }
 
 const STORAGE_KEY = 'csa-prep-progress-v4'
-const EMPTY_DATA: Persisted = { history: [], completed: [], mockResults: [], speakingResults: [], favorites: [], streak: 0, lastPractice: null }
+const EMPTY_DATA: Persisted = { sessions: [], history: [], completed: [], mockResults: [], speakingResults: [], favorites: [], streak: 0, lastPractice: null }
 const CATEGORY_LABELS = { 'customer-service': 'Customer service', behavioral: 'Real examples', 'amazon-style': 'Role & judgment', extempore: 'Speaking & HR' }
 
 const NAV: { label: View; name: string; icon: typeof Target }[] = [
@@ -41,15 +43,36 @@ const VIEW_LABEL: Record<View, string> = {
   Practice: 'Interview answers', Interview: 'Interview answers', Assessment: 'Assessments',
   'Question Bank': 'Question library', Progress: 'Your activity', Settings: 'Settings',
 }
+const VIEW_HASH: Record<View, string> = { Dashboard: 'overview', Practice: 'written', Interview: 'interview', 'Question Bank': 'questions', Assessment: 'assessments', 'Speaking Coach': 'speaking', Progress: 'activity', 'Study Plan': 'study-plan', Settings: 'settings' }
+
+function useDraftWarning(dirty: boolean) {
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+}
 
 export default function CsaPrepApp() {
   const [view, setView] = useState<View>('Dashboard')
+  const [visited, setVisited] = useState<View[]>(['Dashboard'])
   const [data, setData] = useState<Persisted>(EMPTY_DATA)
   const [notice, setNotice] = useState('')
   const [hydrated, setHydrated] = useState(false)
   const [storageWritable, setStorageWritable] = useState(true)
   const [practiceSeed, setPracticeSeed] = useState<string | null>(null)
   const [speakingSeed, setSpeakingSeed] = useState<{ id: string; seconds: number } | null>(null)
+
+  useEffect(() => {
+    const syncView = () => {
+      const next = (Object.keys(VIEW_HASH) as View[]).find(key => VIEW_HASH[key] === window.location.hash.slice(1)) || 'Dashboard'
+      setVisited(prev => prev.includes(next) ? prev : [...prev, next]); setView(next); setNotice('')
+      window.scrollTo({ top: 0, behavior: 'instant' })
+    }
+    syncView(); window.addEventListener('popstate', syncView); window.addEventListener('hashchange', syncView)
+    return () => { window.removeEventListener('popstate', syncView); window.removeEventListener('hashchange', syncView) }
+  }, [])
 
   useEffect(() => {
     try {
@@ -76,7 +99,9 @@ export default function CsaPrepApp() {
 
   function go(next: View) {
     if (next === view) return
+    setVisited(prev => prev.includes(next) ? prev : [...prev, next])
     setView(next)
+    window.history.pushState(null, '', `#${VIEW_HASH[next]}`)
     if (next !== 'Speaking Coach') setSpeakingSeed(null)
     setNotice('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -84,7 +109,7 @@ export default function CsaPrepApp() {
   function startFirstSession() { setSpeakingSeed({ id: 'topic-6', seconds: 60 }); go('Speaking Coach') }
   function openPractice(questionId?: string) { setPracticeSeed(questionId || null); go('Practice') }
   function updateData(updater: (prev: Persisted) => Persisted) { setData(prev => updater(prev)) }
-  function reset() { if (window.confirm('Reset all local practice history, favorites and speaking results?')) { setData(EMPTY_DATA); setStorageWritable(true) } }
+  function reset() { if (window.confirm('Reset all local practice history, favorites and speaking results?')) { setData(EMPTY_DATA); setStorageWritable(true); setVisited(['Settings']); setView('Settings'); setSpeakingSeed(null); setPracticeSeed(null); setNotice('Local progress has been reset.') } }
 
   return (
     <div className="app-root min-h-screen bg-background text-foreground">
@@ -115,20 +140,20 @@ export default function CsaPrepApp() {
             </select>
           </div>
 
-          {notice && <div className="mx-4 mt-4 flex items-start justify-between rounded-lg border border-[#DADCE0] bg-white px-4 py-3 text-sm text-foreground sm:mx-8"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X className="size-4" /></button></div>}
+          {notice && <div role="status" className="mx-4 mt-4 flex items-start justify-between rounded-lg border border-[#DADCE0] bg-white px-4 py-3 text-sm text-foreground sm:mx-8"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X className="size-4" /></button></div>}
 
           <header className="workspace-bar"><div><span>CSA preparation</span><ChevronRight className="size-3.5" /><strong>{VIEW_LABEL[view]}</strong></div><button onClick={() => go('Progress')} className="workspace-activity"><Activity className="size-4" />{data.history.length + data.speakingResults.length} scored {data.history.length + data.speakingResults.length === 1 ? 'answer' : 'answers'}</button></header>
           {(view === 'Practice' || view === 'Interview') && <nav className="answer-tabs" aria-label="Answer practice format"><button aria-current={view === 'Practice' ? 'page' : undefined} onClick={() => go('Practice')}>Written practice</button><button aria-current={view === 'Interview' ? 'page' : undefined} onClick={() => go('Interview')}>Interview & mock</button></nav>}
 
-          {view === 'Dashboard' && <Dashboard data={data} readiness={readiness} average={average} competencyStats={competencyStats} go={go} startFirstSession={startFirstSession} />}
-          {view === 'Practice' && <PracticeLab data={data} updateData={updateData} setNotice={setNotice} seedQuestionId={practiceSeed} onSeedConsumed={() => setPracticeSeed(null)} />}
-          {view === 'Question Bank' && <QuestionBank data={data} updateData={updateData} onPractice={openPractice} />}
-          {view === 'Assessment' && <AssessmentLab data={data} updateData={updateData} />}
-          {view === 'Interview' && <InterviewLab data={data} updateData={updateData} setNotice={setNotice} />}
-          {view === 'Speaking Coach' && <SpeakingCoach initialSession={speakingSeed} data={data} updateData={updateData} setNotice={setNotice} />}
-          {view === 'Progress' && <Progress data={data} readiness={readiness} average={average} competencyStats={competencyStats} reset={reset} go={go} />}
-          {view === 'Study Plan' && <StudyPlan data={data} competencyStats={competencyStats} go={go} startFirstSession={startFirstSession} />}
-          {view === 'Settings' && <SettingsPanel data={data} reset={reset} restore={next => { setData(next); setStorageWritable(true); setNotice('Backup restored in this browser.') }} />}
+          {visited.includes('Dashboard') && <section hidden={view !== 'Dashboard'}><Dashboard data={data} readiness={readiness} average={average} competencyStats={competencyStats} go={go} startFirstSession={startFirstSession} /></section>}
+          {visited.includes('Practice') && <section hidden={view !== 'Practice'}><PracticeLab active={view === 'Practice'} data={data} updateData={updateData} setNotice={setNotice} seedQuestionId={practiceSeed} onSeedConsumed={() => setPracticeSeed(null)} /></section>}
+          {visited.includes('Question Bank') && <section hidden={view !== 'Question Bank'}><QuestionBank data={data} updateData={updateData} onPractice={openPractice} /></section>}
+          {visited.includes('Assessment') && <section hidden={view !== 'Assessment'}><AssessmentLab data={data} updateData={updateData} /></section>}
+          {visited.includes('Interview') && <section hidden={view !== 'Interview'}><InterviewLab visible={view === 'Interview'} data={data} updateData={updateData} setNotice={setNotice} /></section>}
+          {visited.includes('Speaking Coach') && <section hidden={view !== 'Speaking Coach'}><SpeakingCoach visible={view === 'Speaking Coach'} initialSession={speakingSeed} data={data} updateData={updateData} setNotice={setNotice} /></section>}
+          {visited.includes('Progress') && <section hidden={view !== 'Progress'}><Progress data={data} readiness={readiness} average={average} competencyStats={competencyStats} reset={reset} go={go} /></section>}
+          {visited.includes('Study Plan') && <section hidden={view !== 'Study Plan'}><StudyPlan data={data} competencyStats={competencyStats} go={go} startFirstSession={startFirstSession} /></section>}
+          {visited.includes('Settings') && <section hidden={view !== 'Settings'}><SettingsPanel data={data} reset={reset} restore={next => { setData(next); setStorageWritable(true); setNotice('Backup restored in this browser.') }} /></section>}
         </main>
       </div>
     </div>
@@ -178,6 +203,7 @@ function Dashboard({ data, go, startFirstSession }: any) {
   const total = data.history.length + data.speakingResults.length
   const recent = [
     ...data.history.map((item: HistoryItem) => ({ id: item.id, label: item.question, date: item.date, score: item.score, type: 'Written answer' })),
+    ...data.sessions.map((item: SessionResult) => ({ id: item.id, label: item.kind === 'workstyle' ? 'Work-style set' : item.kind === 'interview' ? 'Interview mock' : 'Customer-situation set', date: item.date, score: item.score, type: `${item.count} questions` })),
     ...data.speakingResults.map((item: SpeakingResult) => ({ id: item.id, label: item.prompt, date: item.date, score: item.score, type: 'Speaking' })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 3)
   return <Shell eyebrow="Your preparation" title="Prepare for your CSA interview" subtitle="Build clear answers, confident speech and sound customer judgment.">
@@ -190,7 +216,7 @@ function Dashboard({ data, go, startFirstSession }: any) {
       { title: 'Interview answers', text: 'Write a clear answer or run a short interview mock.', meta: 'Written practice · 3-question mock', icon: Users, view: 'Practice' as View, action: 'Practise an answer' },
       { title: 'Assessments', text: 'Work through customer situations and work-style choices.', meta: 'Practice sets · 24-item mocks', icon: ListChecks, view: 'Assessment' as View, action: 'Choose a practice set' },
     ].map(item => <button key={item.title} className="practice-path" onClick={() => go(item.view)}><item.icon className="path-icon" /><h3>{item.title}</h3><p>{item.text}</p><small>{item.meta}</small><span>{item.action}<ChevronRight className="size-4" /></span></button>)}</div></section>
-    <section className="practice-recent"><div className="section-heading"><h2>Recent activity</h2><button className="text-link" onClick={() => go('Progress')}>View activity <ChevronRight className="size-4" /></button></div>{!recent.length ? <div className="recent-empty"><Clock3 className="size-5" /><p>Your completed sessions will appear here.</p><span>Start with the speaking drill above.</span></div> : recent.map(item => <div key={item.id} className="recent-row"><div><p>{item.label}</p><small>{item.type} · {new Date(item.date).toLocaleDateString()}</small></div><strong>{item.score}<small>/100</small></strong></div>)}</section>
+    <section className="practice-recent"><div className="section-heading"><h2>Recent activity</h2><button className="text-link" onClick={() => go('Progress')}>View activity <ChevronRight className="size-4" /></button></div>{!recent.length ? <div className="recent-empty"><Clock3 className="size-5" /><p>Your completed sessions will appear here.</p><span>Start with the speaking drill above.</span></div> : recent.map(item => <div key={item.id} className="recent-row"><div><p>{item.label}</p><small>{item.type} · {new Date(item.date).toLocaleDateString()}</small></div><strong>{item.score !== undefined ? <>{item.score}<small>/100</small></> : <Check className="size-5" aria-label="Completed" />}</strong></div>)}</section>
   </Shell>
 }
 
@@ -214,6 +240,7 @@ function QuickAction({ label, sub, icon: Icon, onClick, tone }: any) {
 }
 
 function PracticeLab({
+  active,
   data,
   updateData,
   setNotice,
@@ -223,6 +250,7 @@ function PracticeLab({
   data: Persisted
   updateData: (fn: (p: Persisted) => Persisted) => void
   setNotice: (s: string) => void
+  active: boolean
   seedQuestionId: string | null
   onSeedConsumed: () => void
 }) {
@@ -241,18 +269,23 @@ function PracticeLab({
   const [loading, setLoading] = useState(false)
   const [seconds, setSeconds] = useState(0)
   const selected = set[index]
+  useDraftWarning(Boolean(answer.trim()) && !evaluation)
 
   useEffect(() => {
-    if (seedQuestionId) onSeedConsumed()
+    if (!seedQuestionId) return
+    const seeded = questions.find(question => question.id === seedQuestionId)
+    if (seeded) { setSet([seeded, ...getRandomQuestions(7, { excludeIds: [seeded.id] })]); setIndex(0); setAnswer(''); setEvaluation(null); setSeconds(0) }
+    onSeedConsumed()
   }, [seedQuestionId, onSeedConsumed])
 
   useEffect(() => {
-    if (evaluation) return
+    if (!active || evaluation || loading) return
     const id = window.setInterval(() => setSeconds(value => value + 1), 1000)
     return () => window.clearInterval(id)
-  }, [evaluation, index])
+  }, [active, evaluation, index, loading])
 
   function createSet() {
+    if (answer.trim() && !evaluation && !window.confirm('Start a new set and discard this unreviewed answer?')) return
     let excluded = seenQuestionIds.current
     if (questions.length - excluded.length < 8) {
       excluded = set.map(question => question.id)
@@ -268,6 +301,7 @@ function PracticeLab({
   }
 
   async function submit() {
+    if (loading || evaluation) return
     if (!selected || answer.trim().length < 20) {
       setNotice('Write enough detail to evaluate — at least 20 characters.')
       return
@@ -354,7 +388,7 @@ function PracticeLab({
         <QuestionWorkspace
           question={selected}
           answer={answer}
-          setAnswer={setAnswer}
+          setAnswer={value => { setAnswer(value); setEvaluation(null) }}
           evaluation={evaluation}
           loading={loading}
           submit={submit}
@@ -367,6 +401,29 @@ function PracticeLab({
   )
 }
 
+function ReviewDialog({ open, onClose, title = 'Answer review', children, footer }: { open: boolean; onClose: () => void; title?: string; children: ReactNode; footer?: ReactNode }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const titleId = useId()
+  useEffect(() => {
+    const element = dialog.current
+    if (!element || !open) return
+    element.showModal()
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { element.close(); document.body.style.overflow = previousOverflow }
+  }, [open])
+  return <dialog ref={dialog} className="review-dialog" aria-labelledby={titleId} onCancel={event => { event.preventDefault(); onClose() }} onClick={event => { if (event.target === event.currentTarget) { const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose() } }}>
+    <header className="review-dialog-header"><div><p>Practice feedback</p><h2 id={titleId}>{title}</h2></div><button autoFocus type="button" className="review-dialog-close" aria-label="Close review" onClick={onClose}><X className="size-5" /></button></header>
+    <div className="review-dialog-body">{children}</div>
+    <footer className="review-dialog-footer"><button className="btn-secondary" onClick={onClose}>Back to answer</button>{footer}</footer>
+  </dialog>
+}
+
+function SavedReview({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return <><button className="btn-secondary mt-4" onClick={() => setOpen(true)}>View saved review</button><ReviewDialog open={open} onClose={() => setOpen(false)} title={title}>{children}</ReviewDialog></>
+}
+
 function QuestionWorkspace({
   question,
   answer,
@@ -377,6 +434,7 @@ function QuestionWorkspace({
   next,
   seconds,
   progress,
+  nextLabel = 'Next question',
 }: {
   question: Question
   answer: string
@@ -387,7 +445,11 @@ function QuestionWorkspace({
   next: () => void
   seconds: number
   progress: string
+  nextLabel?: string
 }) {
+  const [reviewOpen, setReviewOpen] = useState(false)
+  useEffect(() => { setReviewOpen(Boolean(evaluation)) }, [evaluation])
+  function advance() { setReviewOpen(false); next(); window.scrollTo({ top: 0, behavior: 'instant' }) }
   return (
     <div className="final-practice-layout">
       <div className="final-practice-main">
@@ -405,6 +467,8 @@ function QuestionWorkspace({
         <textarea
           aria-label="Your answer"
           disabled={loading}
+          readOnly={Boolean(evaluation)}
+          maxLength={12000}
           value={answer}
           onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setAnswer(e.target.value)}
           placeholder="Write what you would actually say. Keep it clear, natural and specific."
@@ -412,34 +476,37 @@ function QuestionWorkspace({
         />
 
         <div className="final-practice-foot">
-          <span>{answer.trim() ? answer.trim().split(/\s+/).length : 0} words</span>
+          <span role="status">{answer.trim() ? answer.trim().split(/\s+/).length : 0} words{!evaluation && answer.trim().length < 20 && ' · At least 20 characters to review'}</span>
 
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setAnswer('')}
-              disabled={loading || !answer.trim()}
+              disabled={loading || !answer.trim() || Boolean(evaluation)}
               className="btn-secondary"
             >
               Clear
             </button>
-            <button disabled={loading || answer.trim().length < 20} onClick={submit} className="btn-primary">
+            {evaluation && <button onClick={() => setAnswer(answer)} className="btn-secondary">Edit and retry</button>}
+            <button disabled={loading || Boolean(evaluation) || answer.trim().length < 20} onClick={submit} className="btn-primary">
               <WandSparkles className="size-4" />
-              {loading ? 'Reviewing your answer…' : 'Review answer'}
+              {loading ? 'Reviewing your answer…' : evaluation ? 'Answer reviewed' : 'Review answer'}
             </button>
           </div>
         </div>
       </div>
 
-      {evaluation && (
-        <div className="final-practice-report">
-          <EvaluationCard evaluation={evaluation} question={question} answer={answer} onNext={next} />
-        </div>
-      )}
+      {evaluation && <>
+        <div className="review-ready" role="status"><div><strong>{evaluation.overall}/100</strong><span>Your answer has been reviewed.</span></div><button className="btn-secondary" onClick={() => setReviewOpen(true)}>View answer review</button><button className="btn-primary" onClick={advance}>{nextLabel}<ChevronRight className="size-4" /></button></div>
+        <ReviewDialog open={reviewOpen} onClose={() => setReviewOpen(false)} footer={<><button className="btn-secondary" onClick={() => { setReviewOpen(false); setAnswer(answer) }}>Edit and retry</button><button className="btn-primary" onClick={advance}>{nextLabel}<ChevronRight className="size-4" /></button></>}>
+          <p className="review-dialog-prompt">{question.prompt}</p>
+          <EvaluationCard evaluation={evaluation} question={question} answer={answer} onNext={advance} showActions={false} />
+        </ReviewDialog>
+      </>}
     </div>
   )
 }
 
-function EvaluationCard({ evaluation, question, answer, onNext }: { evaluation: Evaluation; question: Question; answer: string; onNext: () => void }) {
+function EvaluationCard({ evaluation, question, answer, onNext, nextLabel = 'Next question', showActions = true }: { evaluation: Evaluation; question: Question; answer: string; onNext: () => void; nextLabel?: string; showActions?: boolean }) {
   const ai = evaluation.aiFeedback
   if (ai) {
     return <section className="review-panel">
@@ -541,7 +608,7 @@ function EvaluationCard({ evaluation, question, answer, onNext }: { evaluation: 
         <div className="mt-4 grid gap-5 md:grid-cols-3"><FeedbackList title="Local strengths" items={evaluation.strengths} /><FeedbackList title="Local weaknesses" items={evaluation.weaknesses} /><FeedbackList title="Local missing elements" items={evaluation.missingElements} /></div>
       </details>
 
-      <div className="mt-7 flex flex-wrap gap-3"><button onClick={onNext} className="btn-primary">Next question <ChevronRight className="size-4" /></button><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="btn-secondary">Review prompt</button></div>
+      {showActions && <div className="mt-7 flex flex-wrap gap-3"><button onClick={onNext} className="btn-primary">{nextLabel} <ChevronRight className="size-4" /></button><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="btn-secondary">Review prompt</button></div>}
     </section>
   }
 
@@ -551,7 +618,7 @@ function EvaluationCard({ evaluation, question, answer, onNext }: { evaluation: 
     <p className="report-context-note">This is an approximate keyword and structure check. It cannot verify relevance, factual accuracy or interview readiness; use it as a checklist, not a hiring score.</p>
     <details className="feedback-disclosure"><summary>Scores by criterion</summary><div className="report-metrics-grid">{visibleScores.map(([key, score]) => <ReportMetric key={key} label={getCompetencyLabel(key)} value={score} />)}</div></details>
     <div className="report-coaching-grid mt-6"><div className="report-coaching-panel report-positive"><FeedbackList title="What worked" items={evaluation.strengths} /></div><div className="report-coaching-panel report-improve"><FeedbackList title="Improve next" items={[...evaluation.weaknesses, ...evaluation.missingElements]} /></div></div>
-    <div className="mt-7 flex flex-wrap gap-3"><button onClick={onNext} className="btn-primary">Next question <ChevronRight className="size-4" /></button><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="btn-secondary">Review prompt</button></div>
+    {showActions && <div className="mt-7 flex flex-wrap gap-3"><button onClick={onNext} className="btn-primary">{nextLabel} <ChevronRight className="size-4" /></button><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="btn-secondary">Review prompt</button></div>}
   </section>
 }
 
@@ -766,7 +833,8 @@ function AssessmentLab({ data, updateData }: { data: Persisted; updateData: (fn:
 
   function finishAssessment(finalScores: number[]) {
     const score = Math.round(finalScores.reduce((sum, value) => sum + value, 0) / (finalScores.length * 3) * 100)
-    updateData(prev => ({ ...prev, mockResults: [score, ...prev.mockResults].slice(0, 30), lastPractice: new Date().toISOString(), streak: computeStreak(prev.lastPractice, prev.streak) }))
+    const sessionResult: SessionResult = { id: `assessment-${Date.now()}`, date: new Date().toISOString(), kind: scenarioMode === 'exam' ? 'customer-mock' : 'customer-practice', count: session.length, score, decisions: session.map(item => { const chosen = item.options.find(option => option.id === (item.id === session[index]?.id ? choice : scenarioChoices[item.id])); return { prompt: item.situation, answer: chosen?.text || '', reason: chosen?.rationale, better: chosen?.score !== 3 ? item.options.find(option => option.score === 3)?.text : undefined } }) }
+    updateData(prev => ({ ...prev, sessions: [sessionResult, ...prev.sessions].slice(0, 100), mockResults: [score, ...prev.mockResults].slice(0, 30), lastPractice: new Date().toISOString(), streak: computeStreak(prev.lastPractice, prev.streak) }))
     setFinished(true)
   }
 
@@ -788,7 +856,8 @@ function AssessmentLab({ data, updateData }: { data: Persisted; updateData: (fn:
     setWorkChoices(prev => ({ ...prev, [item.id]: side }))
 
     if (index + 1 >= workSession.length) {
-      updateData(prev => ({ ...prev, lastPractice: new Date().toISOString(), streak: computeStreak(prev.lastPractice, prev.streak) }))
+      const sessionResult: SessionResult = { id: `workstyle-${Date.now()}`, date: new Date().toISOString(), kind: 'workstyle', count: workSession.length, decisions: workSession.map(question => ({ prompt: 'Which statement better describes how you usually work?', answer: (question.id === item.id ? side : workChoices[question.id]) === 'left' ? question.left : question.right })) }
+      updateData(prev => ({ ...prev, sessions: [sessionResult, ...prev.sessions].slice(0, 100), lastPractice: new Date().toISOString(), streak: computeStreak(prev.lastPractice, prev.streak) }))
       setFinished(true)
     } else {
       setIndex(value => value + 1)
@@ -800,7 +869,7 @@ function AssessmentLab({ data, updateData }: { data: Persisted; updateData: (fn:
       <Shell eyebrow="Assessment" title="Assessments" subtitle="Choose a format, read carefully, and understand the reasoning behind each decision.">
         {finished && (
           <section className="evaluation-report evaluation-report-assessment final-assessment-result">
-            <div className="report-header"><div><p className="report-kicker">Assessment complete</p><div className="report-score-line"><strong>{tab === 'simulation' ? average : Object.keys(workChoices).length}</strong><span>{tab === 'simulation' ? '/100' : `/${workSession.length}`}</span></div><p className="report-verdict">{tab === 'simulation' ? 'Use this as a coaching signal for customer judgment, not as an Amazon score prediction.' : 'You completed the work-style set. There is no fake right-or-wrong personality score here.'}</p></div><div className="report-meta"><span>{tab === 'simulation' ? `${session.length} situations` : `${workSession.length} choices`}</span><span>{tab === 'simulation' ? 'Original practice' : 'Answer authentically'}</span></div></div>
+            <div className="report-header"><div><p className="report-kicker">Assessment complete</p><div className="report-score-line"><strong>{tab === 'simulation' ? average : Object.keys(workChoices).length}</strong><span>{tab === 'simulation' ? '/100' : `/${workSession.length}`}</span></div><p className="report-verdict">{tab === 'simulation' ? 'Use this as a coaching signal for customer judgment, not as an Amazon score prediction.' : 'You completed the work-style set. Work-style practice has no right-or-wrong personality score.'}</p></div><div className="report-meta"><span>{tab === 'simulation' ? `${session.length} situations` : `${workSession.length} choices`}</span><span>{tab === 'simulation' ? 'Original practice' : 'Answer authentically'}</span></div></div>
             <div className="report-next-step mt-5"><Target className="size-5 shrink-0" /><div><strong>Next step</strong><p>{tab === 'simulation' ? 'Review any weak decisions, then try another set without checking explanations until you commit.' : 'Use your answers consistently. Do not try to reverse-engineer a personality profile.'}</p></div></div>
           </section>
         )}
@@ -846,11 +915,11 @@ function AssessmentLab({ data, updateData }: { data: Persisted; updateData: (fn:
 
   if (tab === 'simulation' && 'options' in current) {
     return (
-      <Shell>
+      <Shell title={scenarioMode === 'exam' ? 'Customer-situation mock' : 'Customer-situation practice'} subtitle="Choose a response before continuing.">
         <div className="final-assessment-active">
           <div className="final-assessment-progress">
             <span>Situation {index + 1} of {session.length}</span>
-            <span>{Math.round((index + 1) / session.length * 100)}% complete</span>
+            <span>{Math.round(scores.length / session.length * 100)}% complete</span>
           </div>
 
           <h2>{current.situation}</h2>
@@ -860,6 +929,7 @@ function AssessmentLab({ data, updateData }: { data: Persisted; updateData: (fn:
               <button
                 key={option.id}
                 disabled={revealed}
+                aria-pressed={choice === option.id}
                 onClick={() => setChoice(option.id)}
                 className={`assessment-choice ${choice === option.id ? 'assessment-choice-selected' : ''} ${revealed && choice === option.id ? (option.score >= 2 ? 'assessment-choice-good' : 'assessment-choice-bad') : ''}`}
               >
@@ -907,7 +977,7 @@ function AssessmentLab({ data, updateData }: { data: Persisted; updateData: (fn:
 
   const work = current as WorkStyleItem
   return (
-    <Shell>
+    <Shell title="Work-style practice" subtitle="Choose the statement that best describes you. Each choice moves to the next question.">
       <div className="final-assessment-active">
         <div className="final-assessment-progress">
           <span>Question {index + 1} of {workSession.length}</span>
@@ -932,14 +1002,17 @@ function AssessmentLab({ data, updateData }: { data: Persisted; updateData: (fn:
 }
 
 function InterviewLab({
+  visible,
   data,
   updateData,
   setNotice,
 }: {
+  visible: boolean
   data: Persisted
   updateData: (fn: (p: Persisted) => Persisted) => void
   setNotice: (s: string) => void
 }) {
+  const [completion, setCompletion] = useState<{ count: number; average: number } | null>(null)
   const [mode, setMode] = useState<'single' | 'mock'>('single')
   const [active, setActive] = useState(false)
   const [set, setSet] = useState<Question[]>([])
@@ -950,12 +1023,13 @@ function InterviewLab({
   const [seconds, setSeconds] = useState(0)
   const [loading, setLoading] = useState(false)
   const recentInterviewIds = useRef<string[]>([])
+  useDraftWarning(active && Boolean(answer.trim()) && !evaluation)
 
   useEffect(() => {
-    if (!active || evaluation) return
+    if (!visible || !active || evaluation || loading) return
     const id = window.setInterval(() => setSeconds(value => value + 1), 1000)
     return () => window.clearInterval(id)
-  }, [active, evaluation, index])
+  }, [visible, active, evaluation, index, loading])
 
   function begin(chosen: 'single' | 'mock') {
     let excluded = recentInterviewIds.current
@@ -967,6 +1041,7 @@ function InterviewLab({
       : createBalancedInterviewMock(excluded)
 
     recentInterviewIds.current = [...excluded, ...nextSet.map(question => question.id)].slice(-48)
+    setCompletion(null)
     setMode(chosen)
     setSet(nextSet)
     setIndex(0)
@@ -978,6 +1053,7 @@ function InterviewLab({
   }
 
   async function submit() {
+    if (loading || evaluation) return
     const question = set[index]
     if (!question || answer.trim().length < 20) {
       setNotice('Give a complete interview answer before submitting.')
@@ -1021,7 +1097,7 @@ function InterviewLab({
     }
 
     setEvaluation(result)
-    setScores(prev => [...prev, result.overall])
+    setScores(prev => { const nextScores = [...prev]; nextScores[index] = result.overall; return nextScores })
 
     const item: HistoryItem = {
       id: `${question.id}-${Date.now()}`,
@@ -1059,12 +1135,14 @@ function InterviewLab({
         updateData(prev => ({
           ...prev,
           mockResults: [average, ...prev.mockResults].slice(0, 30),
+          sessions: [{ id: `interview-${Date.now()}`, date: new Date().toISOString(), kind: 'interview' as const, count: set.length, score: average }, ...prev.sessions].slice(0, 100),
         }))
         setNotice(`Mock interview complete: ${average}/100 average.`)
       } else {
         setNotice('Interview question complete.')
       }
 
+      setCompletion({ count: set.length, average: Math.round(scores.reduce((a, b) => a + b, 0) / Math.max(1, scores.length)) })
       setActive(false)
       return
     }
@@ -1079,6 +1157,7 @@ function InterviewLab({
     return (
       <Shell eyebrow="Interview" title="Interview practice" subtitle="Practice a single answer or run a short mock. Clear, truthful examples matter more than memorized scripts.">
 
+        {completion && <section className="session-completion" role="status"><Check className="size-5" /><div><h2>{completion.count === 1 ? 'Practice complete' : 'Mock interview complete'}</h2><p>{completion.count} {completion.count === 1 ? 'answer' : 'answers'} reviewed · {completion.average}/100 {completion.count === 1 ? 'score' : 'average'}. Your feedback is saved in Your activity.</p></div></section>}
         <div className="final-interview-grid">
           <button onClick={() => begin('single')} className="final-interview-card final-interview-practice">
             <span className="final-interview-icon"><Mic className="size-5" /></span>
@@ -1104,23 +1183,24 @@ function InterviewLab({
 
   const question = set[index]
   return (
-    <Shell>
+    <Shell title={mode === 'mock' ? 'Mock interview' : 'Interview answer'} subtitle={mode === 'mock' ? 'Three questions. Review each answer, then finish the mock.' : 'Answer in your own words and review the feedback.'}>
       <QuestionWorkspace
         question={question}
         answer={answer}
-        setAnswer={setAnswer}
+        setAnswer={value => { setAnswer(value); setEvaluation(null) }}
         evaluation={evaluation}
         loading={loading}
         submit={submit}
         next={next}
         seconds={seconds}
         progress={`${index + 1}/${set.length}`}
+        nextLabel={index + 1 === set.length ? mode === 'mock' ? 'Finish mock' : 'Finish practice' : 'Next question'}
       />
     </Shell>
   )
 }
 
-function SpeakingCoach({ initialSession, data, updateData, setNotice }: { initialSession?: { id: string; seconds: number } | null; data: Persisted; updateData: (fn: (p: Persisted) => Persisted) => void; setNotice: (s: string) => void }) {
+function SpeakingCoach({ visible, initialSession, data, updateData, setNotice }: { visible: boolean; initialSession?: { id: string; seconds: number } | null; data: Persisted; updateData: (fn: (p: Persisted) => Persisted) => void; setNotice: (s: string) => void }) {
   const prompts = speakingTopics
   const [prompt, setPrompt] = useState(() => initialSession ? speakingTopics.find(topic => topic.id === initialSession.id)! : pickSpeakingTopic())
   const [targetSeconds, setTargetSeconds] = useState(initialSession?.seconds || 120)
@@ -1140,7 +1220,15 @@ function SpeakingCoach({ initialSession, data, updateData, setNotice }: { initia
   const startedRef = useRef<number>(0)
   const streamRef = useRef<MediaStream | null>(null)
   const mountedRef = useRef(true)
+  useDraftWarning(Boolean(transcript.trim()) && !evaluation)
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; if (recorderRef.current) { recorderRef.current.onstop = null; if (recorderRef.current.state !== 'inactive') recorderRef.current.stop() } streamRef.current?.getTracks().forEach(track => track.stop()) } }, [])
+
+  useEffect(() => {
+    if (!visible && recorderRef.current?.state === 'recording') stopRecording()
+  }, [visible])
+  useEffect(() => {
+    if (initialSession) { newPrompt(speakingTopics.find(topic => topic.id === initialSession.id)!); setTargetSeconds(initialSession.seconds) }
+  }, [initialSession])
 
   useEffect(() => {
     if (!recording) return
@@ -1162,10 +1250,10 @@ function SpeakingCoach({ initialSession, data, updateData, setNotice }: { initia
   const paceState = metrics.wordsPerMinute === 0 ? '—' : metrics.wordsPerMinute < 105 ? 'slow' : metrics.wordsPerMinute > 175 ? 'fast' : 'good'
 
   async function startRecording() {
-    setTimeUp(false); setEvaluation(null); setTranscript(''); setWords([]); setDuration(0); setElapsed(0)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       if (!mountedRef.current) { stream.getTracks().forEach(track => track.stop()); return }
+      setTimeUp(false); setEvaluation(null); setTranscript(''); setWords([]); setDuration(0); setElapsed(0)
       streamRef.current = stream
       const preferred = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
@@ -1201,6 +1289,7 @@ function SpeakingCoach({ initialSession, data, updateData, setNotice }: { initia
   }
 
   async function analyze() {
+    if (evaluating || transcribing || recording || evaluation) return
     if (transcript.trim().length < 15) return setNotice('Record or enter a longer speaking sample first.')
     if (duration < 1 || duration > 900) return setNotice('Enter the speaking duration, between 1 and 900 seconds, for your pasted transcript.')
     setEvaluating(true)
@@ -1209,7 +1298,7 @@ function SpeakingCoach({ initialSession, data, updateData, setNotice }: { initia
       const res = await fetch('/api/speaking-evaluate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ prompt: prompt.prompt, transcript, duration: Math.max(1, duration || elapsed), wpm: metrics.wordsPerMinute, fillers: metrics.fillerWords, longPauses: metrics.longPauses, language, pauseMetricsAvailable: words.length > 0 }) }); window.clearTimeout(timeout)
       const payload = await res.json().catch(() => ({})); if (!res.ok) throw new Error(payload.error || 'Speaking analysis failed.')
       setEvaluation(payload.evaluation)
-      const result: SpeakingResult = { id: `speak-${Date.now()}`, prompt: prompt.prompt, date: new Date().toISOString(), duration: Math.max(1, duration || elapsed), wpm: metrics.wordsPerMinute, fillers: metrics.fillerWords, longPauses: metrics.longPauses, score: payload.evaluation.overall }
+      const result: SpeakingResult = { transcript, evaluation: payload.evaluation, pauseMetricsAvailable: words.length > 0, id: `speak-${Date.now()}`, prompt: prompt.prompt, date: new Date().toISOString(), duration: Math.max(1, duration || elapsed), wpm: metrics.wordsPerMinute, fillers: metrics.fillerWords, longPauses: metrics.longPauses, score: payload.evaluation.overall }
       updateData(prev => ({ ...prev, speakingResults: [result, ...prev.speakingResults].slice(0, 50), lastPractice: new Date().toISOString(), streak: computeStreak(prev.lastPractice, prev.streak) }))
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Speaking analysis failed.') } finally { setEvaluating(false) }
   }
@@ -1223,22 +1312,27 @@ function SpeakingCoach({ initialSession, data, updateData, setNotice }: { initia
     </div>
     <div className="speaking-layout">
     <div className="speaking-workspace p-6 sm:p-8"><p className="session-privacy">Recording is transcribed by Groq. Actual interview timing varies.</p>
-        <div className="flex flex-wrap items-center justify-between gap-3"><select aria-label="Recording language" value={language} disabled={recording || transcribing} onChange={(e: ChangeEvent<HTMLSelectElement>) => setLanguage(e.target.value as 'en' | 'hi')} className="rounded-md border border-[#E5E5E5] bg-white px-3 py-1 text-xs font-bold text-[var(--ui-accent)]"><option value="en">English</option><option value="hi">Hindi</option></select><span className="topic-timer" role="timer" aria-label="Time remaining">{Math.floor(Math.max(0, targetSeconds - elapsed) / 60)}:{String(Math.max(0, targetSeconds - elapsed) % 60).padStart(2, '0')}<small>remaining</small></span></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><select aria-label="Recording language" value={language} disabled={recording || transcribing || evaluating} onChange={(e: ChangeEvent<HTMLSelectElement>) => setLanguage(e.target.value as 'en' | 'hi')} className="rounded-md border border-[#E5E5E5] bg-white px-3 py-1 text-xs font-bold text-[var(--ui-accent)]"><option value="en">English</option><option value="hi">Hindi</option></select><span className="topic-timer" role="timer" aria-label="Time remaining">{Math.floor(Math.max(0, targetSeconds - elapsed) / 60)}:{String(Math.max(0, targetSeconds - elapsed) % 60).padStart(2, '0')}<small>remaining</small></span></div>
         <h2 className="final-speaking-prompt">{prompt.prompt}</h2><details className="topic-tip"><summary>Show speaking tips</summary><p>{prompt.hint}</p></details><details className="topic-tip"><summary>Topic source</summary><p>{prompt.basis}. These are rewritten practice prompts, not guaranteed interview questions. Auto-captions can contain errors.</p><a href={prompt.source.url} target="_blank" rel="noreferrer" className="underline">{prompt.source.label}</a></details>{timeUp && <p className="topic-finished" role="status">Time is up. Your recording has stopped.</p>}
         <div className="mt-7 flex flex-wrap items-center gap-3">{!recording ? <button onClick={startRecording} disabled={transcribing || evaluating} className="btn-rose"><Mic className="size-4" /> Start recording</button> : <button onClick={stopRecording} className="btn-stop"><CircleStop className="size-4" /> Stop recording</button>}{audioUrl && <audio controls src={audioUrl} className="h-10 max-w-full" />}{transcribing && <span className="text-sm font-semibold text-[var(--ui-accent)]">Transcribing with Whisper…</span>}</div>
-        <label className="mt-7 block text-sm font-semibold">Transcript <span className="font-normal text-muted-foreground">(editable)</span></label><textarea aria-label="Speaking transcript" value={transcript} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => { setTranscript(e.target.value); setWords([]) }} placeholder="Your recording transcript will appear here. You can also paste a transcript manually." className="mt-2 min-h-52 w-full rounded-lg border border-[#E5E5E5] bg-white p-4 text-base leading-7 outline-none focus:ring-2 focus:ring-[var(--recording)]/30" />
-        {!audioUrl && transcript.trim() && <label className="manual-duration">Speaking duration for pasted text (seconds)<input aria-label="Pasted transcript duration" type="number" min="1" max="900" value={duration || ''} onChange={e => setDuration(Number(e.target.value))} /><small>Use the time you actually spoke. Pace is unavailable without it.</small></label>}
-        <button onClick={analyze} disabled={evaluating || transcribing || recording || transcript.trim().length < 15 || duration < 1 || duration > 900} className="btn-rose mt-5"><Brain className="size-4" /> {evaluating ? 'Analyzing speech…' : 'Analyze speaking'}</button>
+        <label className="mt-7 block text-sm font-semibold">Transcript <span className="font-normal text-muted-foreground">(editable)</span></label><textarea aria-label="Speaking transcript" maxLength={12000} disabled={recording || transcribing || evaluating} value={transcript} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => { setTranscript(e.target.value); setWords([]); setEvaluation(null) }} placeholder="Your recording transcript will appear here. You can also paste a transcript manually." className="mt-2 min-h-52 w-full rounded-lg border border-[#E5E5E5] bg-white p-4 text-base leading-7 outline-none focus:ring-2 focus:ring-[var(--recording)]/30" />
+        {!audioUrl && transcript.trim() && <label className="manual-duration">Speaking duration for pasted text (seconds)<input aria-label="Pasted transcript duration" type="number" min="1" max="900" disabled={evaluating || transcribing} value={duration || ''} onChange={e => { setDuration(Number(e.target.value)); setEvaluation(null) }} /><small>Use the time you actually spoke. Pace is unavailable without it.</small></label>}
+        <button onClick={analyze} disabled={Boolean(evaluation) || evaluating || transcribing || recording || transcript.trim().length < 15 || duration < 1 || duration > 900} className="btn-rose mt-5"><Brain className="size-4" /> {evaluating ? 'Analyzing speech…' : evaluation ? 'Speaking reviewed' : 'Analyze speaking'}</button>
       </div>
 
-      <details className="speaking-details"><summary>Delivery details</summary><div className="card-surface p-6"><div className="flex items-center gap-2"><Gauge className="size-5 text-[var(--accent-primary)]" /><h3 className="font-semibold">Delivery metrics</h3></div><div className="mt-5 grid grid-cols-2 gap-3"><SpeechMetric label="Words" value={metrics.words || '—'} /><SpeechMetric label="Pace" value={metrics.wordsPerMinute ? `${metrics.wordsPerMinute} wpm` : '—'} note={paceState === 'good' ? 'Good range' : paceState === 'slow' ? 'May feel slow' : paceState === 'fast' ? 'May feel rushed' : ''} /><SpeechMetric label="Fillers" value={metrics.fillerWords} note={metrics.words ? `${metrics.fillerRate}% of words` : ''} /><SpeechMetric label="Long pauses" value={metrics.longPauses} note={metrics.longestPause ? `Longest ${metrics.longestPause}s` : 'From word timestamps'} /></div><p className="mt-4 text-xs leading-5 text-muted-foreground">Pause metrics are available when the audio transcription returns word timestamps. Edited/manual transcripts cannot recreate real pauses.</p></div><div className="speaking-guidance p-5 text-sm leading-6 text-muted-foreground"><Volume2 className="size-5 text-[var(--accent-primary)]" /><p className="mt-3"><strong className="text-[var(--accent-primary)]">Useful target:</strong> roughly 120–160 WPM is often comfortable for clear interview speech, but clarity matters more than chasing one number.</p></div></details>
+      <details className="speaking-details"><summary>Delivery details</summary><div className="card-surface p-6"><div className="flex items-center gap-2"><Gauge className="size-5 text-[var(--accent-primary)]" /><h3 className="font-semibold">Delivery metrics</h3></div><div className="mt-5 grid grid-cols-2 gap-3"><SpeechMetric label="Words" value={metrics.words || '—'} /><SpeechMetric label="Pace" value={metrics.wordsPerMinute ? `${metrics.wordsPerMinute} wpm` : '—'} note={paceState === 'good' ? 'Good range' : paceState === 'slow' ? 'May feel slow' : paceState === 'fast' ? 'May feel rushed' : ''} /><SpeechMetric label="Fillers" value={metrics.fillerWords} note={metrics.words ? `${metrics.fillerRate}% of words` : ''} /><SpeechMetric label="Long pauses" value={words.length ? metrics.longPauses : '—'} note={!words.length ? 'Unavailable without timestamps' : metrics.longestPause ? `Longest ${metrics.longestPause}s` : 'From word timestamps'} /></div><p className="mt-4 text-xs leading-5 text-muted-foreground">Pause metrics are available when the audio transcription returns word timestamps. Edited/manual transcripts cannot recreate real pauses.</p></div><div className="speaking-guidance p-5 text-sm leading-6 text-muted-foreground"><Volume2 className="size-5 text-[var(--accent-primary)]" /><p className="mt-3"><strong className="text-[var(--accent-primary)]">Useful target:</strong> roughly 120–160 WPM is often comfortable for clear interview speech, but clarity matters more than chasing one number.</p></div></details>
     </div>
 
-    {evaluation && <SpeakingEvaluation evaluation={evaluation} metrics={metrics} />}
+    {evaluation && <SpeakingReview key={evaluation.overall + evaluation.conciseFeedback} evaluation={evaluation} metrics={metrics} />}
   </Shell>
 }
 
 function SpeechMetric({ label, value, note }: any) { return <div className="rounded-lg bg-muted p-4"><p className="text-xs font-semibold text-muted-foreground">{label}</p><p className="mt-1 text-xl font-semibold">{value}</p>{note && <p className="mt-1 text-[11px] text-muted-foreground">{note}</p>}</div> }
+
+function SpeakingReview({ evaluation, metrics }: { evaluation: SpeakingEval; metrics: ReturnType<typeof getSpeakingMetrics> }) {
+  const [open, setOpen] = useState(true)
+  return <><div className="review-ready"><div><strong>{evaluation.overall}/100</strong><span>Your speaking review is ready.</span></div><button className="btn-primary" onClick={() => setOpen(true)}>View speaking review</button></div><ReviewDialog open={open} onClose={() => setOpen(false)} title="Speaking review"><SpeakingEvaluation evaluation={evaluation} metrics={metrics} /></ReviewDialog></>
+}
 
 function SpeakingEvaluation({ evaluation, metrics }: { evaluation: SpeakingEval; metrics: ReturnType<typeof getSpeakingMetrics> }) {
   const dims = [['Fluency', evaluation.fluency], ['Grammar', evaluation.grammar], ['Vocabulary', evaluation.vocabulary], ['Structure', evaluation.structure], ['Relevance', evaluation.relevance]] as const
@@ -1262,7 +1356,7 @@ function SpeakingEvaluation({ evaluation, metrics }: { evaluation: SpeakingEval;
 function Progress({ data, readiness, average, competencyStats, reset, go }: any) {
   const speaking = data.speakingResults.slice(0, 10)
   const recentAnswers = data.history.slice(0, 10)
-  if (!data.history.length && !data.speakingResults.length && !data.mockResults.length) return <Shell title="Your activity" subtitle="See what you have practised and where to focus next."><div className="activity-empty"><BarChart3 className="size-9" /><h2>Your first session starts here.</h2><p>Complete a speaking drill or written answer to build your practice history.</p><button className="btn-primary" onClick={() => go('Speaking Coach')}>Start speaking <ChevronRight className="size-4" /></button></div></Shell>
+  if (!data.history.length && !data.speakingResults.length && !data.mockResults.length && !data.sessions.length) return <Shell title="Your activity" subtitle="See what you have practised and where to focus next."><div className="activity-empty"><BarChart3 className="size-9" /><h2>Your first session starts here.</h2><p>Complete a speaking drill or written answer to build your practice history.</p><button className="btn-primary" onClick={() => go('Speaking Coach')}>Start speaking <ChevronRight className="size-4" /></button></div></Shell>
 
   return (
     <Shell title="Your activity" subtitle="Review completed sessions and the skills you have practised."
@@ -1275,7 +1369,7 @@ function Progress({ data, readiness, average, competencyStats, reset, go }: any)
       <div className="grid gap-4 md:grid-cols-3">
         <MetricCard icon={Gauge} label="Scored answers" value={data.history.length + data.speakingResults.length} note="Written and speaking" className="metric-indigo" />
         <MetricCard icon={BarChart3} label="Average" value={data.history.length ? `${average}/100` : '—'} note={`${data.history.length} answers`} className="metric-cyan" />
-        <MetricCard icon={Mic} label="Recorded drills" value={data.speakingResults.length} note="Speaking sessions" className="metric-rose" />
+        <MetricCard icon={Mic} label="Speaking reviews" value={data.speakingResults.length} note="Speaking sessions" className="metric-rose" />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
@@ -1301,13 +1395,12 @@ function Progress({ data, readiness, average, competencyStats, reset, go }: any)
           <div className="mt-3 divide-y divide-border">
             {recentAnswers.length
               ? recentAnswers.map((item: HistoryItem) => (
-                  <div key={item.id} className="py-3">
+                  <details key={item.id} className="saved-answer py-3"><summary>
                     <div className="flex gap-4">
                       <p className="line-clamp-2 min-w-0 flex-1 text-sm font-semibold">{item.question}</p>
                       <strong>{item.score}</strong>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">{new Date(item.date).toLocaleDateString()}</p>
-                  </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{new Date(item.date).toLocaleDateString()} · View saved answer and feedback</p></summary><p className="mt-4 whitespace-pre-wrap text-sm leading-6">{item.answer}</p><SavedReview title="Saved answer review"><EvaluationCard showActions={false} evaluation={item.evaluation} question={questions.find(q => q.id === item.questionId) || questions[0]} answer={item.answer} onNext={() => go('Practice')} nextLabel="Practise a new answer" /></SavedReview></details>
                 ))
               : <p className="py-6 text-sm text-muted-foreground">No scored answers yet.</p>}
           </div>
@@ -1320,30 +1413,31 @@ function Progress({ data, readiness, average, competencyStats, reset, go }: any)
           <div className="mt-3 divide-y divide-border">
             {speaking.length
               ? speaking.map((result: SpeakingResult) => (
-                  <div key={result.id} className="py-2">
+                  <details key={result.id} className="saved-answer py-2"><summary>
                     <div className="flex justify-between gap-4">
                       <p className="line-clamp-1 text-sm font-semibold">{result.prompt}</p>
                       <strong>{result.score}</strong>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {result.wpm} WPM · {result.fillers} fillers · {result.longPauses} long pauses
-                    </p>
-                  </div>
+                      {result.wpm} WPM · {result.fillers} fillers · {result.pauseMetricsAvailable ? `${result.longPauses} long pauses` : 'Pauses unavailable'}
+                    </p></summary>{result.transcript && <p className="mt-4 whitespace-pre-wrap text-sm leading-6">{result.transcript}</p>}{result.evaluation && <SavedReview title="Saved speaking review"><SpeakingEvaluation evaluation={result.evaluation} metrics={getSpeakingMetrics(result.transcript || '', result.duration)} /></SavedReview>}
+                  </details>
                 ))
-              : <p className="py-6 text-sm text-muted-foreground">No recorded speaking reports yet.</p>}
+              : <p className="py-6 text-sm text-muted-foreground">No speaking reviews yet.</p>}
           </div>
         </div>
 
         <div className="card-surface p-4">
-          <h2 className="font-semibold">Mock results</h2>
+          <h2 className="font-semibold">Completed sets</h2>
+          <div className="mt-3 divide-y divide-border">{data.sessions.slice(0, 12).map((item: SessionResult) => <details key={item.id} className="saved-answer py-3 text-sm"><summary><strong>{{ 'customer-practice': 'Customer practice', 'customer-mock': 'Customer mock', workstyle: 'Work-style set', interview: 'Interview mock' }[item.kind]}</strong><p className="mt-1 text-muted-foreground">{item.count} {item.kind === 'workstyle' ? 'choices' : 'questions'} · {new Date(item.date).toLocaleDateString()}{item.score !== undefined && ` · ${item.score}/100`}</p></summary>{item.decisions && <div className="mt-4 divide-y divide-border">{item.decisions.map((decision, index) => <div key={index} className="py-3 text-sm leading-6"><h3 className="font-semibold">{index + 1}. {decision.prompt}</h3><p className="mt-2">Your choice: {decision.answer}</p>{decision.reason && <p className="mt-2 text-muted-foreground">{decision.reason}</p>}{decision.better && <p className="mt-2"><strong>Stronger approach:</strong> {decision.better}</p>}</div>)}</div>}</details>)}</div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {data.mockResults.length
+            {data.sessions.length ? null : data.mockResults.length
               ? data.mockResults.slice(0, 12).map((score: number, index: number) => (
                   <span key={index} className="inline-flex items-center rounded-md bg-surface px-2 py-1 text-sm font-semibold text-[var(--ui-accent)]">
                     {score}/100
                   </span>
                 ))
-              : <p className="text-sm text-muted-foreground">Complete a 3-question interview mock to build this history.</p>}
+              : <p className="text-sm text-muted-foreground">Complete an assessment set or interview mock to build this history.</p>}
           </div>
         </div>
       </div>
@@ -1388,7 +1482,7 @@ function SettingsPanel({ data, reset, restore }: { data: Persisted; reset: () =>
   const [backupMessage, setBackupMessage] = useState('')
   function exportBackup() {
     const url = URL.createObjectURL(new Blob([JSON.stringify({ format: 'csa-prep-v4', data }, null, 2)], { type: 'application/json' }))
-    const link = document.createElement('a'); link.href = url; link.download = `csa-progress-${new Date().toISOString().slice(0, 10)}.json`; link.click(); URL.revokeObjectURL(url)
+    const link = document.createElement('a'); link.href = url; link.download = `csa-progress-${new Date().toISOString().slice(0, 10)}.json`; document.body.appendChild(link); link.click(); link.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); setBackupMessage('Backup export requested. Check your browser’s downloads.')
   }
   async function importBackup(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]; if (!file) return
@@ -1411,7 +1505,7 @@ function SettingsPanel({ data, reset, restore }: { data: Persisted; reset: () =>
   return <Shell eyebrow="Settings" title="Settings" subtitle="Manage AI access and the practice history saved on this device.">
     <div className="max-w-3xl space-y-5"><div className="card-surface p-6"><div className="flex gap-4"><ShieldCheck className="mt-1 size-5 text-[var(--success)]" /><div><h2 className="font-semibold">Local-first progress</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Scores, answers, favorites and speaking-report summaries are stored in this browser. Stopping a recording automatically sends its audio to the server and Groq for transcription; they are not stored in localStorage by this app.</p></div></div></div>
       <div className="card-surface p-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-semibold">Groq AI + Whisper</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Groq provides answer feedback and transcribes your recordings.</p></div><span className={`pill ${status === 'ok' ? 'status-success' : status === 'error' ? 'status-error' : status === 'testing' ? 'status-warning' : ''}`}>{status === 'ok' ? 'Configured' : status === 'error' ? 'Unavailable' : status === 'testing' ? 'Testing…' : 'Not tested'}</span></div>{detail && <p className={`mt-4 rounded-lg border p-3 text-sm bg-white ${status === 'error' ? 'border-[var(--error-border)] text-[var(--error)]' : 'border-[var(--success-border)] text-[var(--success)]'}`}>{detail}</p>}<button onClick={test} disabled={status === 'testing'} className="btn-secondary mt-5"><Activity className="size-4" /> Check AI configuration</button></div>
-      <div className="card-surface p-6"><h2 className="font-semibold">Stored locally</h2><p className="mt-2 text-sm text-muted-foreground">{data.history.length} answer records · {data.speakingResults.length} speaking reports · {data.favorites.length} saved prompts</p><div className="mt-5 flex flex-wrap gap-3"><button onClick={exportBackup} className="btn-secondary">Export backup</button><label className="btn-secondary cursor-pointer">Import backup<input type="file" accept=".json,application/json" className="sr-only" onChange={importBackup} /></label></div>{backupMessage && <p role="status" className="mt-3 text-sm">{backupMessage}</p>}<button onClick={reset} className="btn-danger mt-5"><RotateCcw className="size-4" /> Reset all progress</button></div>
+      <div className="card-surface p-6"><h2 className="font-semibold">Stored locally</h2><p className="mt-2 text-sm text-muted-foreground">{data.history.length} answer records · {data.speakingResults.length} speaking reports · {data.favorites.length} saved prompts</p><div className="mt-5 flex flex-wrap gap-3"><button onClick={exportBackup} className="btn-secondary">Export backup</button><label className="btn-secondary cursor-pointer">Import backup<input aria-label="Import progress backup" type="file" accept=".json,application/json" className="sr-only" onChange={importBackup} /></label></div>{backupMessage && <p role="status" className="mt-3 text-sm">{backupMessage}</p>}<button onClick={reset} className="btn-danger mt-5"><RotateCcw className="size-4" /> Reset all progress</button></div>
     </div>
   </Shell>
 }
@@ -1432,6 +1526,10 @@ function validateProgress(input: unknown): Persisted {
   const strings = (key: string) => Array.isArray(value[key]) ? (value[key] as unknown[]).filter((item): item is string => typeof item === 'string').slice(0, 10000) : []
   const score = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 100
   const history = Array.isArray(value.history) ? value.history.filter((item: any) => item && typeof item.id === 'string' && typeof item.questionId === 'string' && typeof item.question === 'string' && typeof item.answer === 'string' && typeof item.date === 'string' && Number.isFinite(Date.parse(item.date)) && score(item.score) && item.category in CATEGORY_LABELS && item.evaluation && typeof item.evaluation === 'object' && item.evaluation.scores && typeof item.evaluation.scores === 'object' && ['strengths', 'weaknesses', 'missingElements', 'suggestions', 'modelStructure'].every(key => Array.isArray(item.evaluation[key]) && item.evaluation[key].every((x: unknown) => typeof x === 'string'))).slice(0, 150) as HistoryItem[] : []
+  history.forEach(item => { if (item.evaluation.aiFeedback) { const parsed = answerFeedbackSchema.safeParse(item.evaluation.aiFeedback); item.evaluation.aiFeedback = parsed.success ? parsed.data : undefined } })
   const speakingResults = Array.isArray(value.speakingResults) ? value.speakingResults.filter((item: any) => item && typeof item.id === 'string' && typeof item.prompt === 'string' && typeof item.date === 'string' && Number.isFinite(Date.parse(item.date)) && score(item.score) && ['duration', 'wpm', 'fillers', 'longPauses'].every(key => typeof item[key] === 'number' && Number.isFinite(item[key]) && item[key] >= 0)).slice(0, 50) as SpeakingResult[] : []
-  return { history, speakingResults, completed: strings('completed'), favorites: strings('favorites'), mockResults: Array.isArray(value.mockResults) ? value.mockResults.filter(score).slice(0, 30) as number[] : [], streak: typeof value.streak === 'number' && Number.isInteger(value.streak) && value.streak >= 0 ? value.streak : 0, lastPractice: typeof value.lastPractice === 'string' && Number.isFinite(Date.parse(value.lastPractice)) ? value.lastPractice : null }
+  speakingResults.forEach(item => { if (item.evaluation) { const parsed = speakingFeedbackSchema.safeParse(item.evaluation); item.evaluation = parsed.success ? parsed.data : undefined }; if (typeof item.transcript !== 'string') item.transcript = undefined })
+  const sessions = Array.isArray(value.sessions) ? value.sessions.filter((item: any) => item && typeof item.id === 'string' && Number.isFinite(Date.parse(item.date)) && ['customer-practice', 'customer-mock', 'workstyle', 'interview'].includes(item.kind) && Number.isInteger(item.count) && item.count > 0 && item.count <= 40 && (item.score === undefined || score(item.score))).slice(0, 100) as SessionResult[] : []
+  sessions.forEach(item => { item.decisions = Array.isArray(item.decisions) ? item.decisions.filter(decision => decision && typeof decision.prompt === 'string' && typeof decision.answer === 'string' && (decision.reason === undefined || typeof decision.reason === 'string') && (decision.better === undefined || typeof decision.better === 'string')).slice(0, 40) : undefined })
+  return { sessions, history, speakingResults, completed: strings('completed'), favorites: strings('favorites'), mockResults: Array.isArray(value.mockResults) ? value.mockResults.filter(score).slice(0, 30) as number[] : [], streak: typeof value.streak === 'number' && Number.isInteger(value.streak) && value.streak >= 0 ? value.streak : 0, lastPractice: typeof value.lastPractice === 'string' && Number.isFinite(Date.parse(value.lastPractice)) ? value.lastPractice : null }
 }

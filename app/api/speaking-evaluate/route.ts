@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { speakingFeedbackSchema as outputSchema } from '../../../lib/feedback-schema'
 
 const inputSchema = z.object({
   prompt: z.string().trim().min(3).max(1200),
@@ -11,20 +12,6 @@ const inputSchema = z.object({
   pauseMetricsAvailable: z.boolean().default(false),
 })
 
-const outputSchema = z.object({
-  overall: z.coerce.number().int().min(1).max(100),
-  fluency: z.coerce.number().int().min(1).max(100),
-  grammar: z.coerce.number().int().min(1).max(100),
-  vocabulary: z.coerce.number().int().min(1).max(100),
-  structure: z.coerce.number().int().min(1).max(100),
-  relevance: z.coerce.number().int().min(1).max(100),
-  conciseFeedback: z.string().min(5).max(700),
-  strengths: z.array(z.string().max(320)).max(5).default([]),
-  improvements: z.array(z.string().max(320)).max(6).default([]),
-  grammarFixes: z.array(z.object({ original: z.string().max(280), better: z.string().max(380), reason: z.string().max(360) })).max(8).default([]),
-  improvedVersion: z.string().min(20).max(3200),
-  nextDrill: z.string().min(5).max(400),
-})
 
 export async function POST(request: Request) {
   const parsedInput = inputSchema.safeParse(await request.json().catch(() => null))
@@ -54,7 +41,7 @@ export async function POST(request: Request) {
         messages: [
           {
             role: 'system',
-            content: `You are a practical interview speaking coach. The candidate language is ${body.language === 'hi' ? 'Hindi' : 'English'}. Evaluate only what is supported by the transcript and delivery metrics. Do not pretend to measure accent, pronunciation, confidence, volume, or tone from text.\n\nFluency can use WPM, transcript filler count, repetition and sentence flow. Use long-pause count only when explicitly marked available; unavailable does not mean zero pauses. Do not claim smooth delivery, no hesitation or no pauses from a pasted transcript. Grammar fixes must quote an exact short excerpt from the transcript. Do not invent errors. Prefer natural professional language over fancy vocabulary. Simple, accurate everyday vocabulary is a strength; do not lower its score merely for being simple or request vivid adjectives or sensory detail unless the exact topic needs them. Do not invent weaknesses to fill the report. Every improvement must address a specific issue in the sample, not an optional embellishment. Preserve the candidate facts in the improved version; do not add feelings, experiences or claims they did not state. Scores are practice estimates, never employer scores or hiring predictions. Structure and relevance must be specific to the exact prompt.\n\nReturn ONLY JSON with: overall, fluency, grammar, vocabulary, structure, relevance (1-100 integers), conciseFeedback, strengths, improvements, grammarFixes [{original,better,reason}], improvedVersion, nextDrill. 70 means usable with gaps; 80 means strong; 90+ should be rare.`,
+            content: `You are a practical interview speaking coach. The candidate language is ${body.language === 'hi' ? 'Hindi' : 'English'}. Evaluate only what is supported by the transcript and delivery metrics. Do not pretend to measure accent, pronunciation, confidence, volume, or tone from text.\n\nFluency can use WPM, transcript filler count, repetition and sentence flow. Use long-pause count only when explicitly marked available; unavailable does not mean zero pauses. Do not claim smooth delivery, no hesitation or no pauses from a pasted transcript. WPM is an average only, not evidence of consistent speed, rhythm or confidence. A pasted transcript cannot establish smooth delivery. Grammar fixes must quote an exact short excerpt from the transcript. Verify that the original is actually ungrammatical before proposing a correction. Independent finite verbs joined with AND are valid: "I spend the morning studying and take a break at noon" is grammatical; do not change TAKE to TAKING to force parallelism. Do not treat optional commas, transitions or varied sentence openings as errors in otherwise clear speech. Do not invent errors. Prefer natural professional language over fancy vocabulary. Simple, accurate everyday vocabulary is a strength; do not lower its score merely for being simple or request vivid adjectives or sensory detail unless the exact topic needs them. Do not invent weaknesses to fill the report. Every improvement must address a specific issue in the sample, not an optional embellishment. Preserve the candidate facts in the improved version; do not add feelings, experiences or claims they did not state. Scores are practice estimates, never employer scores or hiring predictions. Structure and relevance must be specific to the exact prompt.\n\nReturn ONLY JSON with: overall, fluency, grammar, vocabulary, structure, relevance (1-100 integers), conciseFeedback, strengths, improvements, grammarFixes [{original,better,reason}], improvedVersion, nextDrill. 70 means usable with gaps; 80 means strong; 90+ should be rare.`,
           },
           {
             role: 'user',
@@ -83,7 +70,9 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Speaking coach returned an incomplete report. Please retry; your recording is valid.' }, { status: 502 })
     }
 
-    return Response.json({ evaluation: parsedOutput.data, model })
+    const evaluation = parsedOutput.data
+    evaluation.grammarFixes = evaluation.grammarFixes.filter(fix => fix.original.trim() && body.transcript.includes(fix.original))
+    return Response.json({ evaluation, model })
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') return Response.json({ error: 'Speaking analysis timed out. Please retry.' }, { status: 504 })
     console.error('[speaking-evaluate]', error)

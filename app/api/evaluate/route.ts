@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { answerFeedbackSchema as outputSchema } from '../../../lib/feedback-schema'
 
 const inputSchema = z.object({
   question: z.string().trim().min(5).max(2500),
@@ -7,30 +8,6 @@ const inputSchema = z.object({
   mode: z.enum(['workstyle', 'scenario', 'extempore']),
 })
 
-const rubricItemSchema = z.object({
-  criterion: z.string().min(2).max(300),
-  score: z.coerce.number().min(0).max(100),
-  evidence: z.string().max(420).default(''),
-  missing: z.string().max(420).default(''),
-  fix: z.string().max(520).default(''),
-})
-
-const wordingFixSchema = z.object({
-  original: z.string().max(320),
-  better: z.string().max(420),
-  reason: z.string().max(420),
-})
-
-const outputSchema = z.object({
-  score: z.coerce.number().min(0).max(100),
-  verdict: z.string().min(3).max(320),
-  rubricAnalysis: z.array(rubricItemSchema).min(1).max(12),
-  wordingFixes: z.array(wordingFixSchema).max(8).default([]),
-  strengths: z.array(z.string().max(420)).max(5).default([]),
-  contentGaps: z.array(z.string().max(420)).max(6).default([]),
-  improvedAnswer: z.string().min(20).max(4200),
-  followUp: z.string().max(500).default(''),
-})
 
 function compactError(detail: string) {
   try {
@@ -226,6 +203,7 @@ Return ONLY JSON with this exact shape:
     }
 
     const evaluation = parsedOutput.data
+    evaluation.wordingFixes = evaluation.wordingFixes.filter(fix => fix.original.trim() && body.answer.includes(fix.original))
     const rubricOrder = new Map(body.rubric.map((criterion, index) => [criterion.toLowerCase(), index]))
     evaluation.rubricAnalysis.sort((a, b) => (rubricOrder.get(a.criterion.toLowerCase()) ?? 999) - (rubricOrder.get(b.criterion.toLowerCase()) ?? 999))
 
