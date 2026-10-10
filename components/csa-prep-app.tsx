@@ -26,17 +26,21 @@ const STORAGE_KEY = 'csa-prep-progress-v4'
 const EMPTY_DATA: Persisted = { history: [], completed: [], mockResults: [], speakingResults: [], favorites: [], streak: 0, lastPractice: null }
 const CATEGORY_LABELS = { 'customer-service': 'Customer service', behavioral: 'Real examples', 'amazon-style': 'Role & judgment', extempore: 'Speaking & HR' }
 
-const NAV: { label: View; icon: typeof Target; tint: string }[] = [
-  { label: 'Dashboard', icon: LayoutDashboard, tint: 'nav-indigo' },
-  { label: 'Practice', icon: Sparkles, tint: 'nav-cyan' },
-  { label: 'Question Bank', icon: BookOpen, tint: 'nav-violet' },
-  { label: 'Assessment', icon: ListChecks, tint: 'nav-emerald' },
-  { label: 'Interview', icon: Users, tint: 'nav-blue' },
-  { label: 'Speaking Coach', icon: Mic, tint: 'nav-rose' },
-  { label: 'Progress', icon: BarChart3, tint: 'nav-teal' },
-  { label: 'Study Plan', icon: Target, tint: 'nav-amber' },
-  { label: 'Settings', icon: Settings, tint: 'nav-slate' },
+const NAV: { label: View; name: string; icon: typeof Target }[] = [
+  { label: 'Dashboard', name: 'Overview', icon: LayoutDashboard },
+  { label: 'Study Plan', name: 'Study plan', icon: Target },
+  { label: 'Speaking Coach', name: 'Speaking', icon: Mic },
+  { label: 'Practice', name: 'Interview answers', icon: Users },
+  { label: 'Assessment', name: 'Assessments', icon: ListChecks },
+  { label: 'Question Bank', name: 'Question library', icon: BookOpen },
+  { label: 'Progress', name: 'Your activity', icon: BarChart3 },
+  { label: 'Settings', name: 'Settings', icon: Settings },
 ]
+const VIEW_LABEL: Record<View, string> = {
+  Dashboard: 'Overview', 'Study Plan': 'Study plan', 'Speaking Coach': 'Speaking',
+  Practice: 'Interview answers', Interview: 'Interview answers', Assessment: 'Assessments',
+  'Question Bank': 'Question library', Progress: 'Your activity', Settings: 'Settings',
+}
 
 export default function CsaPrepApp() {
   const [view, setView] = useState<View>('Dashboard')
@@ -46,7 +50,6 @@ export default function CsaPrepApp() {
   const [storageWritable, setStorageWritable] = useState(true)
   const [practiceSeed, setPracticeSeed] = useState<string | null>(null)
   const [speakingSeed, setSpeakingSeed] = useState<{ id: string; seconds: number } | null>(null)
-  const [previousView, setPreviousView] = useState<View>('Dashboard')
 
   useEffect(() => {
     try {
@@ -58,7 +61,7 @@ export default function CsaPrepApp() {
   useEffect(() => {
     if (!hydrated || !storageWritable) return
     try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data)) }
-    catch { setNotice('Your browser could not save progress. Export a backup from Settings.') }
+    catch { setStorageWritable(false); setNotice('Your browser could not save progress. Export a backup from Settings.') }
   }, [data, hydrated, storageWritable])
 
   const readiness = getReadinessFromHistory(data.history.map(item => item.score))
@@ -73,15 +76,7 @@ export default function CsaPrepApp() {
 
   function go(next: View) {
     if (next === view) return
-    setPreviousView(view)
     setView(next)
-    setNotice('')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-  function goBack() {
-    const target = previousView === view ? 'Dashboard' : previousView
-    setPreviousView(view)
-    setView(target)
     setNotice('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -91,36 +86,38 @@ export default function CsaPrepApp() {
   function reset() { if (window.confirm('Reset all local practice history, favorites and speaking results?')) { setData(EMPTY_DATA); setStorageWritable(true) } }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto flex max-w-[1560px]">
-        <aside className="app-sidebar sticky top-0 hidden h-screen w-72 shrink-0 border-r border-border/70 bg-sidebar px-4 py-5 lg:flex lg:flex-col">
+    <div className="app-root min-h-screen bg-background text-foreground">
+      <div className="app-frame">
+        <aside className="app-sidebar">
           <Brand />
           
           <nav className="studio-navigation" aria-label="Main navigation">
             {[
-              { title: 'Start', views: ['Dashboard', 'Study Plan'] },
-              { title: 'Practise', views: ['Speaking Coach', 'Practice', 'Assessment', 'Interview'] },
-              { title: 'Library & activity', views: ['Question Bank', 'Progress', 'Settings'] },
+              { title: 'Your preparation', views: ['Dashboard', 'Study Plan'] },
+              { title: 'Practice', views: ['Speaking Coach', 'Practice', 'Assessment'] },
+              { title: 'Review', views: ['Question Bank', 'Progress'] },
             ].map(group => <div className="nav-group" key={group.title}><p>{group.title}</p>{group.views.map(label => {
               const item = NAV.find(item => item.label === label)!
               const Icon = item.icon
-              return <button key={item.label} onClick={() => { setSpeakingSeed(null); go(item.label) }} aria-current={view === item.label ? 'page' : undefined} className={`nav-row ${view === item.label ? 'nav-row-active' : ''}`}><Icon className="size-4" /><span>{item.label === 'Dashboard' ? 'Home' : item.label === 'Practice' ? 'Written answers' : item.label === 'Speaking Coach' ? 'Speaking practice' : item.label === 'Assessment' ? 'Customer situations' : item.label}</span></button>
+              const active = view === item.label || (item.label === 'Practice' && view === 'Interview')
+              return <button key={item.label} onClick={() => { setSpeakingSeed(null); go(item.label) }} aria-current={active ? 'page' : undefined} className={`nav-row ${active ? 'nav-row-active' : ''}`}><Icon className="size-[18px]" /><span>{item.name}</span></button>
             })}</div>)}
           </nav>
-          <div className="sidebar-footer"><span className="local-status-dot" style={{ background: storageWritable ? undefined : "#b42318" }} />{storageWritable ? "Progress saved on this device" : "Progress cannot be saved"}</div>
+          <div className="sidebar-bottom"><button className={`nav-row ${view === 'Settings' ? 'nav-row-active' : ''}`} aria-current={view === 'Settings' ? 'page' : undefined} onClick={() => go('Settings')}><Settings className="size-[18px]" />Settings</button><div className="sidebar-footer"><span className="local-status-dot" data-error={!storageWritable || undefined} />{storageWritable ? 'Saved on this device' : 'Saving unavailable'}</div></div>
         </aside>
 
-        <main className="min-w-0 flex-1">
+        <main className="app-main">
           <div className="mobile-app-header sticky top-0 z-30 flex items-center justify-between border-b border-border/70 bg-background px-4 py-3 lg:hidden">
             <Brand compact />
-            <select aria-label="Navigate" value={view} onChange={(e: ChangeEvent<HTMLSelectElement>) => go(e.target.value as View)} className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold">
-              {NAV.map(item => <option key={item.label}>{item.label}</option>)}
+            <select aria-label="Navigate" value={view === 'Interview' ? 'Practice' : view} onChange={(e: ChangeEvent<HTMLSelectElement>) => { setSpeakingSeed(null); go(e.target.value as View) }} className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold">
+              {NAV.map(item => <option key={item.label} value={item.label}>{item.name}</option>)}
             </select>
           </div>
 
           {notice && <div className="mx-4 mt-4 flex items-start justify-between rounded-lg border border-[#DADCE0] bg-white px-4 py-3 text-sm text-foreground sm:mx-8"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X className="size-4" /></button></div>}
 
-          {view !== 'Dashboard' && <div className="studio-backbar"><button onClick={goBack} className="studio-back" aria-label="Go to previous section"><ArrowLeft className="size-4" /> Back</button></div>}
+          <header className="workspace-bar"><div><span>CSA preparation</span><ChevronRight className="size-3.5" /><strong>{VIEW_LABEL[view]}</strong></div><button onClick={() => go('Progress')} className="workspace-activity"><Activity className="size-4" />{data.history.length + data.speakingResults.length} sessions</button></header>
+          {(view === 'Practice' || view === 'Interview') && <nav className="answer-tabs" aria-label="Answer practice format"><button aria-current={view === 'Practice' ? 'page' : undefined} onClick={() => go('Practice')}>Written practice</button><button aria-current={view === 'Interview' ? 'page' : undefined} onClick={() => go('Interview')}>Interview & mock</button></nav>}
 
           {view === 'Dashboard' && <Dashboard data={data} readiness={readiness} average={average} competencyStats={competencyStats} go={go} startFirstSession={startFirstSession} />}
           {view === 'Practice' && <PracticeLab data={data} updateData={updateData} setNotice={setNotice} seedQuestionId={practiceSeed} onSeedConsumed={() => setPracticeSeed(null)} />}
@@ -128,7 +125,7 @@ export default function CsaPrepApp() {
           {view === 'Assessment' && <AssessmentLab data={data} updateData={updateData} />}
           {view === 'Interview' && <InterviewLab data={data} updateData={updateData} setNotice={setNotice} />}
           {view === 'Speaking Coach' && <SpeakingCoach initialSession={speakingSeed} data={data} updateData={updateData} setNotice={setNotice} />}
-          {view === 'Progress' && <Progress data={data} readiness={readiness} average={average} competencyStats={competencyStats} reset={reset} />}
+          {view === 'Progress' && <Progress data={data} readiness={readiness} average={average} competencyStats={competencyStats} reset={reset} go={go} />}
           {view === 'Study Plan' && <StudyPlan data={data} competencyStats={competencyStats} go={go} />}
           {view === 'Settings' && <SettingsPanel data={data} reset={reset} restore={next => { setData(next); setStorageWritable(true); setNotice('Backup restored in this browser.') }} />}
         </main>
@@ -177,22 +174,22 @@ function ProgressBar({ value, className = '' }: { value: number; className?: str
 }
 
 function Dashboard({ data, go, startFirstSession }: any) {
-  const started = data.history.length + data.speakingResults.length > 0
-  return <Shell title={started ? 'Your practice' : 'Start with one answer'} subtitle={started ? 'Keep sessions short. Review one useful correction, then try again.' : 'You do not need to prepare everything at once. Begin with a familiar topic.'}>
-    <section className="first-session">
-      <div className="first-session-copy"><span className="session-label">{started ? 'A short speaking session' : 'Your first session'} · about 10 minutes</span><h2>Talk about your daily routine</h2><p>Think about your morning, your day and your evening. Speak for one minute using your own words.</p><button className="btn-primary" onClick={startFirstSession}>Start 1-minute practice <ChevronRight className="size-4" /></button></div>
-      <ol className="session-steps"><li><span>1</span><div><strong>Think of three points</strong><p>Take 30 seconds before recording.</p></div></li><li><span>2</span><div><strong>Record your answer</strong><p>Pauses and mistakes are okay.</p></div></li><li><span>3</span><div><strong>Try it once more</strong><p>Use one correction from your feedback.</p></div></li></ol>
-    </section>
-    <section className="practice-menu" aria-label="Practice options"><h2>Choose another session</h2>
-      <QuickAction label="Speaking practice" sub="Choose from 15 topics with source links" icon={Mic} onClick={() => go('Speaking Coach')} />
-      <QuickAction label="Customer situations" sub="Choose a response and understand the reasoning" icon={Headphones} onClick={() => go('Assessment')} />
-      <QuickAction label="Interview practice" sub="One answer or a short three-question mock" icon={Users} onClick={() => go('Interview')} />
-    </section>
-    <section className="practice-recent"><div className="section-heading"><h2>Recent practice</h2><button className="studio-text-button" onClick={() => go('Progress')}>View activity <ChevronRight className="size-4" /></button></div>
-      {!started && <p className="recent-empty">Your completed answers will appear here.</p>}
-      {data.speakingResults.slice(0, 2).map((item: SpeakingResult) => <div key={item.id} className="recent-row"><Mic className="size-4" /><div><p>{item.prompt}</p><small>Speaking · {Math.round(item.duration)} seconds · {new Date(item.date).toLocaleDateString()}</small></div><span>{item.score}/100</span></div>)}
-      {data.history.slice(0, 3).map((item: HistoryItem) => <div key={item.id} className="recent-row"><BookOpen className="size-4" /><div><p>{item.question}</p><small>{new Date(item.date).toLocaleDateString()}</small></div><span>{item.score}/100</span></div>)}
-    </section>
+  const total = data.history.length + data.speakingResults.length
+  const recent = [
+    ...data.history.map((item: HistoryItem) => ({ id: item.id, label: item.question, date: item.date, score: item.score, type: 'Written answer' })),
+    ...data.speakingResults.map((item: SpeakingResult) => ({ id: item.id, label: item.prompt, date: item.date, score: item.score, type: 'Speaking' })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 3)
+  return <Shell eyebrow="Your preparation" title="Prepare for your CSA interview" subtitle="Build clear answers, confident speech and sound customer judgment.">
+    <div className="overview-top">
+      <section className="recommended-session"><span className="session-label"><Mic className="size-4" />{total ? 'A quick speaking drill' : 'Recommended starting point'}</span><h2>Start with something<br className="desktop-break" /> you know.</h2><p>Talk through your daily routine for one minute. Review one correction, then try the answer again.</p><div className="session-facts"><span><Clock3 className="size-4" />1-minute recording</span><span>English or Hindi</span></div><button className="btn-primary" onClick={startFirstSession}>Start speaking <ChevronRight className="size-4" /></button></section>
+      <aside className="overview-plan"><div className="section-heading"><span className="section-label">A simple way to prepare</span><span className="plan-duration">7 days</span></div><ol><li><span>01</span><div><strong>Get comfortable speaking</strong><p>Use familiar topics and your own words.</p></div></li><li><span>02</span><div><strong>Build your interview answers</strong><p>Prepare truthful examples, then try a mock.</p></div></li><li><span>03</span><div><strong>Practise customer decisions</strong><p>Understand the reasoning behind a response.</p></div></li></ol><button onClick={() => go('Study Plan')} className="text-link">Open the study plan <ChevronRight className="size-4" /></button></aside>
+    </div>
+    <section className="practice-paths"><div className="section-heading"><h2>Choose what to practise</h2><button onClick={() => go('Question Bank')} className="text-link">Browse all questions <ChevronRight className="size-4" /></button></div><div className="practice-path-grid">{[
+      { title: 'Speaking', text: 'Record a timed answer, listen back and review your delivery.', meta: `${speakingTopics.length} sourced topics · 1–3 minutes`, icon: Mic, view: 'Speaking Coach' as View, action: 'Choose a topic' },
+      { title: 'Interview answers', text: 'Write a clear answer or run a short interview mock.', meta: 'Written practice · 3-question mock', icon: Users, view: 'Practice' as View, action: 'Practise an answer' },
+      { title: 'Assessments', text: 'Work through customer situations and work-style choices.', meta: 'Practice sets · 24-item mocks', icon: ListChecks, view: 'Assessment' as View, action: 'Choose a practice set' },
+    ].map(item => <button key={item.title} className="practice-path" onClick={() => go(item.view)}><item.icon className="path-icon" /><h3>{item.title}</h3><p>{item.text}</p><small>{item.meta}</small><span>{item.action}<ChevronRight className="size-4" /></span></button>)}</div></section>
+    <section className="practice-recent"><div className="section-heading"><h2>Recent activity</h2><button className="text-link" onClick={() => go('Progress')}>View activity <ChevronRight className="size-4" /></button></div>{!recent.length ? <div className="recent-empty"><Clock3 className="size-5" /><p>Your completed sessions will appear here.</p><span>Start with the speaking drill above.</span></div> : recent.map(item => <div key={item.id} className="recent-row"><div><p>{item.label}</p><small>{item.type} · {new Date(item.date).toLocaleDateString()}</small></div><strong>{item.score}<small>/100</small></strong></div>)}</section>
   </Shell>
 }
 
@@ -345,7 +342,7 @@ function PracticeLab({
   }
 
   return (
-    <Shell title="Answer practice" eyebrow="Guided practice" subtitle="Read the question, respond in your own words, then review what to improve."
+    <Shell title="Written answer practice" eyebrow="Guided practice" subtitle="Read the question, respond in your own words, then review what to improve."
       action={
         <button onClick={createSet} disabled={loading} className="btn-secondary">
           <RefreshCcw className="size-4" /> New set
@@ -603,7 +600,7 @@ function QuestionBank({
   }
 
   return (
-    <Shell eyebrow="Question library" title="Question bank" subtitle="Browse original practice prompts. Save useful ones and build confidence one answer at a time.">
+    <Shell eyebrow="Question library" title="Question library" subtitle="Browse original practice prompts. Save useful ones and build confidence one answer at a time.">
       <div className="final-bank-toolbar">
         <label className="final-bank-search">
           <Search className="size-4" />
@@ -799,7 +796,7 @@ function AssessmentLab({ data, updateData }: { data: Persisted; updateData: (fn:
 
   if (!current || finished) {
     return (
-      <Shell eyebrow="Assessment" title="Customer situations & work style" subtitle="Choose a format, read carefully, and understand the reasoning behind each decision.">
+      <Shell eyebrow="Assessment" title="Assessments" subtitle="Choose a format, read carefully, and understand the reasoning behind each decision.">
         {finished && (
           <section className="evaluation-report evaluation-report-assessment final-assessment-result">
             <div className="report-header"><div><p className="report-kicker">Assessment complete</p><div className="report-score-line"><strong>{tab === 'simulation' ? average : Object.keys(workChoices).length}</strong><span>{tab === 'simulation' ? '/100' : `/${workSession.length}`}</span></div><p className="report-verdict">{tab === 'simulation' ? 'Use this as a coaching signal for customer judgment, not as an Amazon score prediction.' : 'You completed the work-style set. There is no fake right-or-wrong personality score here.'}</p></div><div className="report-meta"><span>{tab === 'simulation' ? `${session.length} situations` : `${workSession.length} choices`}</span><span>{tab === 'simulation' ? 'Original practice' : 'Answer authentically'}</span></div></div>
@@ -1261,9 +1258,10 @@ function SpeakingEvaluation({ evaluation, metrics }: { evaluation: SpeakingEval;
   </section>
 }
 
-function Progress({ data, readiness, average, competencyStats, reset }: any) {
+function Progress({ data, readiness, average, competencyStats, reset, go }: any) {
   const speaking = data.speakingResults.slice(0, 10)
   const recentAnswers = data.history.slice(0, 10)
+  if (!data.history.length && !data.speakingResults.length && !data.mockResults.length) return <Shell title="Your activity" subtitle="See what you have practised and where to focus next."><div className="activity-empty"><BarChart3 className="size-9" /><h2>Your first session starts here.</h2><p>Complete a speaking drill or written answer to build your practice history.</p><button className="btn-primary" onClick={() => go('Speaking Coach')}>Start speaking <ChevronRight className="size-4" /></button></div></Shell>
 
   return (
     <Shell title="Your activity" subtitle="Review completed sessions and the skills you have practised."
@@ -1411,7 +1409,7 @@ function SettingsPanel({ data, reset, restore }: { data: Persisted; reset: () =>
   }
   return <Shell eyebrow="Settings" title="Settings" subtitle="Manage AI access and the practice history saved on this device.">
     <div className="max-w-3xl space-y-5"><div className="card-surface p-6"><div className="flex gap-4"><ShieldCheck className="mt-1 size-5 text-[var(--success)]" /><div><h2 className="font-semibold">Local-first progress</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Scores, answers, favorites and speaking-report summaries are stored in this browser. Stopping a recording automatically sends its audio to the server and Groq for transcription; they are not stored in localStorage by this app.</p></div></div></div>
-      <div className="card-surface p-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-semibold">Groq AI + Whisper</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Server-side <code className="rounded bg-muted px-1.5 py-0.5">GROQ_API_KEY</code> powers answer coaching and audio transcription.</p></div><span className={`pill ${status === 'ok' ? 'status-success' : status === 'error' ? 'status-error' : status === 'testing' ? 'status-warning' : ''}`}>{status === 'ok' ? 'Connected' : status === 'error' ? 'Unavailable' : status === 'testing' ? 'Testing…' : 'Not tested'}</span></div>{detail && <p className={`mt-4 rounded-lg border p-3 text-sm bg-white ${status === 'error' ? 'border-[var(--error-border)] text-[var(--error)]' : 'border-[var(--success-border)] text-[var(--success)]'}`}>{detail}</p>}<button onClick={test} disabled={status === 'testing'} className="btn-secondary mt-5"><Activity className="size-4" /> Test Groq connection</button></div>
+      <div className="card-surface p-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-semibold">Groq AI + Whisper</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Groq provides answer feedback and transcribes your recordings.</p></div><span className={`pill ${status === 'ok' ? 'status-success' : status === 'error' ? 'status-error' : status === 'testing' ? 'status-warning' : ''}`}>{status === 'ok' ? 'Connected' : status === 'error' ? 'Unavailable' : status === 'testing' ? 'Testing…' : 'Not tested'}</span></div>{detail && <p className={`mt-4 rounded-lg border p-3 text-sm bg-white ${status === 'error' ? 'border-[var(--error-border)] text-[var(--error)]' : 'border-[var(--success-border)] text-[var(--success)]'}`}>{detail}</p>}<button onClick={test} disabled={status === 'testing'} className="btn-secondary mt-5"><Activity className="size-4" /> Test Groq connection</button></div>
       <div className="card-surface p-6"><h2 className="font-semibold">Stored locally</h2><p className="mt-2 text-sm text-muted-foreground">{data.history.length} answer records · {data.speakingResults.length} speaking reports · {data.favorites.length} saved prompts</p><div className="mt-5 flex flex-wrap gap-3"><button onClick={exportBackup} className="btn-secondary">Export backup</button><label className="btn-secondary cursor-pointer">Import backup<input type="file" accept=".json,application/json" className="sr-only" onChange={importBackup} /></label></div>{backupMessage && <p role="status" className="mt-3 text-sm">{backupMessage}</p>}<button onClick={reset} className="btn-danger mt-5"><RotateCcw className="size-4" /> Reset all progress</button></div>
     </div>
   </Shell>
