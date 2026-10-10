@@ -184,9 +184,9 @@ function ProgressBar({ value, className = '' }: { value: number; className?: str
 }
 
 function Dashboard({ data, go }: any) {
-  return <Shell title="CSA practice" subtitle="Choose a session. Your answers and recordings stay in this browser.">
+  return <Shell title="CSA practice" subtitle="Choose a session. Your practice history is saved in this browser.">
     <section className="practice-menu" aria-label="Practice options">
-      <QuickAction label="Speak on a topic" sub="Choose a topic · 2 or 3 minutes" icon={Mic} onClick={() => go('Speaking Coach')} />
+      <QuickAction label="Speak on a topic" sub="Choose a topic · 1, 2 or 3 minutes" icon={Mic} onClick={() => go('Speaking Coach')} />
       <QuickAction label="Customer situations" sub="Make a decision and review the explanation" icon={Headphones} onClick={() => go('Assessment')} />
       <QuickAction label="Mock interview" sub="Three questions with answer feedback" icon={Users} onClick={() => go('Interview')} />
     </section>
