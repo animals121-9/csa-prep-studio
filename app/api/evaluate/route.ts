@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { answerFeedbackSchema as outputSchema } from '../../../lib/feedback-schema'
+import { hasUnsupportedQuantity, answerFeedbackSchema as outputSchema } from '../../../lib/feedback-schema'
 
 const inputSchema = z.object({
   question: z.string().trim().min(5).max(2500),
@@ -134,7 +134,7 @@ CONTENT GAPS:
 
 IMPROVED ANSWER:
 - Preserve the candidate's meaning and facts.
-- Do not invent metrics, policies, employers, experiences, achievements, or outcomes.
+- Do not invent metrics, policies, employers, experiences, achievements, or outcomes. A result such as finishing a day early already demonstrates impact; never add invented hours saved. Do not lower a good answer merely because it lacks a numerical metric.
 - Improve only what actually needs improvement.
 - Keep the improved answer concise and realistic.
 - Do NOT make it unnecessarily longer than the candidate's answer.
@@ -203,6 +203,7 @@ Return ONLY JSON with this exact shape:
     }
 
     const evaluation = parsedOutput.data
+    if (hasUnsupportedQuantity(body.answer, evaluation.improvedAnswer)) evaluation.improvedAnswer = body.answer
     evaluation.wordingFixes = evaluation.wordingFixes.filter(fix => fix.original.trim() && body.answer.includes(fix.original))
     const rubricOrder = new Map(body.rubric.map((criterion, index) => [criterion.toLowerCase(), index]))
     evaluation.rubricAnalysis.sort((a, b) => (rubricOrder.get(a.criterion.toLowerCase()) ?? 999) - (rubricOrder.get(b.criterion.toLowerCase()) ?? 999))

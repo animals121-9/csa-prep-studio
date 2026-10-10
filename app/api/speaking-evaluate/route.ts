@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { speakingFeedbackSchema as outputSchema } from '../../../lib/feedback-schema'
+import { hasUnsupportedQuantity, speakingFeedbackSchema as outputSchema } from '../../../lib/feedback-schema'
 
 const inputSchema = z.object({
   prompt: z.string().trim().min(3).max(1200),
@@ -71,6 +71,7 @@ export async function POST(request: Request) {
     }
 
     const evaluation = parsedOutput.data
+    if (hasUnsupportedQuantity(body.transcript, evaluation.improvedVersion)) evaluation.improvedVersion = body.transcript
     evaluation.grammarFixes = evaluation.grammarFixes.filter(fix => fix.original.trim() && body.transcript.includes(fix.original))
     return Response.json({ evaluation, model })
   } catch (error) {

@@ -1848,3 +1848,19 @@ button[aria-pressed=true] {
 .review-ready strong { color:#1d4ed8; font-size:22px; }
 .review-ready span { color:#24364f; font-size:14px; }
 @media(max-width:600px) { .review-dialog { width:calc(100vw - 20px); max-height:calc(100dvh - 20px); border-radius:14px; } .review-dialog-header { padding:14px 16px; } .review-dialog-body { padding:16px; } .review-dialog-footer { padding:12px 16px; gap:8px; } .review-dialog-footer button { flex:1 1 auto; justify-content:center; } .review-dialog-footer > :first-child { margin:0; } .review-dialog .report-coaching-grid { grid-template-columns:1fr; } .review-dialog .review-head { padding:16px; } }
+
+.review-dialog { margin:auto; }
+
+.review-dialog { width:min(860px,calc(100vw - 48px)); height:min(760px,calc(100dvh - 64px)); }
+.review-dialog-body { flex:1; }
+.review-dialog .review-head h3 { font-size:17px; line-height:1.55; margin-top:12px; }
+.review-dialog .review-source { white-space:nowrap; background:#fff; color:#334155; }
+.review-dialog .review-head { padding:18px 20px; }
+.review-dialog .report-coaching-panel { border:1px solid; border-radius:10px; padding:18px; }
+.review-tabs { display:flex; gap:4px; padding:4px; margin:20px 0; border:1px solid #e2e8f0; border-radius:10px; background:#f1f5f9; }
+.review-tabs button { flex:1; padding:10px 8px; font-size:13px; font-weight:600; color:#475569; border-radius:7px; cursor:pointer; }
+.review-tabs button[aria-pressed="true"] { background:#fff; color:#1d4ed8; box-shadow:0 1px 4px #17255418; }
+.review-panel[data-review-tab="overview"] .review-details, .review-panel[data-review-tab="overview"] .review-suggestion,
+.review-panel[data-review-tab="details"] .review-overview, .review-panel[data-review-tab="details"] .review-suggestion,
+.review-panel[data-review-tab="suggestion"] .review-overview, .review-panel[data-review-tab="suggestion"] .review-details { display:none; }
+@media(max-width:600px) { .review-dialog { width:calc(100vw - 20px); height:calc(100dvh - 28px); max-height:calc(100dvh - 28px); } .review-tabs button { font-size:12px; padding:10px 4px; } .review-dialog .review-source { white-space:normal; } }

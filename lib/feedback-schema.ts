@@ -41,3 +41,13 @@ export const speakingFeedbackSchema = z.object({
   nextDrill: z.string().min(5).max(400),
 })
 
+
+// An AI rewrite must not introduce a measurable claim absent from the sample.
+// Normalize equivalent written/digit quantities and common unit spellings.
+export function hasUnsupportedQuantity(original: string, rewrite: string): boolean {
+  const numbers: Record<string, string> = { a:'1', an:'1', one:'1', two:'2', three:'3', four:'4', five:'5', six:'6', seven:'7', eight:'8', nine:'9', ten:'10', eleven:'11', twelve:'12', twenty:'20', thirty:'30', hundred:'100', thousand:'1000' }
+  const pattern = /\b(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|hundred|thousand)\s*(%|percent|hours?|minutes?|seconds?|days?|weeks?|months?|years?|dollars?|rupees?|customers?|orders?|tickets?|people|teammates?|times)(?!\w)/gi
+  const quantities = (text: string) => Array.from(text.matchAll(pattern), match => `${numbers[match[1].toLowerCase()] || match[1]}:${match[2].toLowerCase().replace(/s$/, '').replace('%', 'percent')}`)
+  const supported = new Set(quantities(original))
+  return quantities(rewrite).some(value => !supported.has(value))
+}

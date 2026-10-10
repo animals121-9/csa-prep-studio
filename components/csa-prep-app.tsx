@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from 'react'
 import {
   Activity, ArrowLeft, BarChart3, BookOpen, Brain, Check, ChevronRight, CircleStop,
   Clock3, Flame, Gauge, Headphones, LayoutDashboard, ListChecks, Mic,
@@ -401,7 +401,7 @@ function PracticeLab({
   )
 }
 
-function ReviewDialog({ open, onClose, title = 'Answer review', children, footer }: { open: boolean; onClose: () => void; title?: string; children: ReactNode; footer?: ReactNode }) {
+function ReviewDialog({ open, onClose, title = 'Answer review', children, footer, returnFocus }: { open: boolean; onClose: () => void; title?: string; children: ReactNode; footer?: ReactNode; returnFocus?: RefObject<HTMLButtonElement | null> }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   useEffect(() => {
@@ -412,7 +412,7 @@ function ReviewDialog({ open, onClose, title = 'Answer review', children, footer
     document.body.style.overflow = 'hidden'
     return () => { element.close(); document.body.style.overflow = previousOverflow }
   }, [open])
-  return <dialog ref={dialog} className="review-dialog" aria-labelledby={titleId} onCancel={event => { event.preventDefault(); onClose() }} onClick={event => { if (event.target === event.currentTarget) { const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose() } }}>
+  return <dialog ref={dialog} onClose={() => returnFocus?.current?.focus()} className="review-dialog" onKeyDown={event => { if (event.key !== 'Tab') return; const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], summary, input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]')).filter(element => element.getClientRects().length > 0); const first = controls[0]; const last = controls[controls.length - 1]; if (event.shiftKey && (document.activeElement === first || document.activeElement === event.currentTarget)) { event.preventDefault(); last?.focus() } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() } }} aria-labelledby={titleId} onCancel={event => { event.preventDefault(); onClose() }} onClick={event => { if (event.target === event.currentTarget) { const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose() } }}>
     <header className="review-dialog-header"><div><p>Practice feedback</p><h2 id={titleId}>{title}</h2></div><button autoFocus type="button" className="review-dialog-close" aria-label="Close review" onClick={onClose}><X className="size-5" /></button></header>
     <div className="review-dialog-body">{children}</div>
     <footer className="review-dialog-footer"><button className="btn-secondary" onClick={onClose}>Back to answer</button>{footer}</footer>
@@ -421,7 +421,8 @@ function ReviewDialog({ open, onClose, title = 'Answer review', children, footer
 
 function SavedReview({ title, children }: { title: string; children: ReactNode }) {
   const [open, setOpen] = useState(false)
-  return <><button className="btn-secondary mt-4" onClick={() => setOpen(true)}>View saved review</button><ReviewDialog open={open} onClose={() => setOpen(false)} title={title}>{children}</ReviewDialog></>
+  const trigger = useRef<HTMLButtonElement>(null)
+  return <><button ref={trigger} className="btn-secondary mt-4" onClick={() => setOpen(true)}>View saved review</button><ReviewDialog returnFocus={trigger} open={open} onClose={() => setOpen(false)} title={title}>{children}</ReviewDialog></>
 }
 
 function QuestionWorkspace({
@@ -448,8 +449,11 @@ function QuestionWorkspace({
   nextLabel?: string
 }) {
   const [reviewOpen, setReviewOpen] = useState(false)
+  const reviewTrigger = useRef<HTMLButtonElement>(null)
+  const answerInput = useRef<HTMLTextAreaElement>(null)
   useEffect(() => { setReviewOpen(Boolean(evaluation)) }, [evaluation])
-  function advance() { setReviewOpen(false); next(); window.scrollTo({ top: 0, behavior: 'instant' }) }
+  function advance() { setReviewOpen(false); next(); window.scrollTo({ top: 0, behavior: 'instant' }); requestAnimationFrame(() => answerInput.current?.focus()) }
+  function retry() { setReviewOpen(false); setAnswer(answer); requestAnimationFrame(() => answerInput.current?.focus()) }
   return (
     <div className="final-practice-layout">
       <div className="final-practice-main">
@@ -465,6 +469,7 @@ function QuestionWorkspace({
         {question.context && <p className="final-practice-context">{question.context}</p>}
 
         <textarea
+          ref={answerInput}
           aria-label="Your answer"
           disabled={loading}
           readOnly={Boolean(evaluation)}
@@ -486,7 +491,7 @@ function QuestionWorkspace({
             >
               Clear
             </button>
-            {evaluation && <button onClick={() => setAnswer(answer)} className="btn-secondary">Edit and retry</button>}
+            {evaluation && <button onClick={retry} className="btn-secondary">Edit and retry</button>}
             <button disabled={loading || Boolean(evaluation) || answer.trim().length < 20} onClick={submit} className="btn-primary">
               <WandSparkles className="size-4" />
               {loading ? 'Reviewing your answer…' : evaluation ? 'Answer reviewed' : 'Review answer'}
@@ -496,8 +501,8 @@ function QuestionWorkspace({
       </div>
 
       {evaluation && <>
-        <div className="review-ready" role="status"><div><strong>{evaluation.overall}/100</strong><span>Your answer has been reviewed.</span></div><button className="btn-secondary" onClick={() => setReviewOpen(true)}>View answer review</button><button className="btn-primary" onClick={advance}>{nextLabel}<ChevronRight className="size-4" /></button></div>
-        <ReviewDialog open={reviewOpen} onClose={() => setReviewOpen(false)} footer={<><button className="btn-secondary" onClick={() => { setReviewOpen(false); setAnswer(answer) }}>Edit and retry</button><button className="btn-primary" onClick={advance}>{nextLabel}<ChevronRight className="size-4" /></button></>}>
+        <div className="review-ready" role="status"><div><strong>{evaluation.overall}/100</strong><span>Your answer has been reviewed.</span></div><button ref={reviewTrigger} className="btn-secondary" onClick={() => setReviewOpen(true)}>View answer review</button><button className="btn-primary" onClick={advance}>{nextLabel}<ChevronRight className="size-4" /></button></div>
+        <ReviewDialog returnFocus={reviewTrigger} open={reviewOpen} onClose={() => setReviewOpen(false)} footer={<><button className="btn-secondary" onClick={retry}>Edit and retry</button><button className="btn-primary" onClick={advance}>{nextLabel}<ChevronRight className="size-4" /></button></>}>
           <p className="review-dialog-prompt">{question.prompt}</p>
           <EvaluationCard evaluation={evaluation} question={question} answer={answer} onNext={advance} showActions={false} />
         </ReviewDialog>
@@ -507,12 +512,13 @@ function QuestionWorkspace({
 }
 
 function EvaluationCard({ evaluation, question, answer, onNext, nextLabel = 'Next question', showActions = true }: { evaluation: Evaluation; question: Question; answer: string; onNext: () => void; nextLabel?: string; showActions?: boolean }) {
+  const [tab, setTab] = useState<'overview' | 'details' | 'suggestion'>('overview')
   const ai = evaluation.aiFeedback
   if (ai) {
-    return <section className="review-panel">
+    return <section className="review-panel" data-review-tab={!showActions ? tab : undefined}>
       <div className="review-head">
         <div>
-          <p className="review-kicker">Answer review</p>
+          <p className="review-kicker">Practice score</p>
           <div className="mt-2 flex flex-wrap items-end gap-3">
             <span className="review-score">{ai.score}</span>
             <span className="pb-1 text-sm font-semibold text-muted-foreground">/100</span>
@@ -522,16 +528,17 @@ function EvaluationCard({ evaluation, question, answer, onNext, nextLabel = 'Nex
         <span className="review-source"><Brain className="size-4" /> Groq analysis</span>
       </div>
 
-      <details className="feedback-disclosure"><summary>Scores by criterion</summary><div className="report-metrics-grid mt-6">
+      {!showActions && <div className="review-tabs" aria-label="Feedback sections">{([['overview', 'Overview'], ['details', 'Detailed feedback'], ['suggestion', 'Suggested answer']] as const).map(([value, label]) => <button key={value} aria-pressed={tab === value} onClick={() => setTab(value)}>{label}</button>)}</div>}
+      <details className="feedback-disclosure review-overview"><summary>Scores by criterion</summary><div className="report-metrics-grid mt-6">
         {ai.rubricAnalysis.slice(0, 6).map((item, index) => <ReportMetric key={`${item.criterion}-${index}`} label={item.criterion} value={item.score} />)}
       </div></details>
 
-      <div className="report-coaching-grid mt-6">
+      <div className="report-coaching-grid review-overview mt-6">
         <div className="report-coaching-panel report-positive"><FeedbackList title="What worked" items={ai.strengths.length ? ai.strengths : ['No specific strengths reported by the coach.']} /></div>
         <div className="report-coaching-panel report-improve"><FeedbackList title="Improve next" items={ai.contentGaps.length ? ai.contentGaps : ['No significant content gaps reported by the coach.']} /></div>
       </div>
 
-      <details className="feedback-disclosure"><summary>Wording and detailed coaching</summary><div className="report-detail-stack mt-7">
+      <div className="review-details"><div className="report-detail-stack mt-5">
         <section className="report-wording-section">
           <div className="report-section-title">
             <span>Wording & grammar</span>
@@ -596,14 +603,14 @@ function EvaluationCard({ evaluation, question, answer, onNext, nextLabel = 'Nex
         </section>
       </div>
 
-      </details><div className="mt-7 card-surface p-5 sm:p-6">
-        <div className="report-section-heading"><div><div className="section-label">A stronger version</div><p>Keeps your facts and makes the answer clearer.</p></div><WandSparkles className="size-5" /></div>
+      </div><div className="review-suggestion mt-5 card-surface p-5 sm:p-6">
+        <div className="report-section-heading"><div><div className="section-label">Suggested wording</div><p>Use only details that are true for you.</p></div><WandSparkles className="size-5" /></div>
         <p className="mt-4 whitespace-pre-wrap text-[15px] leading-7">{ai.improvedAnswer}</p>
       </div>
 
-      {ai.followUp && <div className="mt-5 rounded-lg border border-[#DADCE0] bg-white p-5"><p className="section-label">Possible follow-up</p><p className="mt-2 text-sm leading-6">{ai.followUp}</p></div>}
+      {ai.followUp && <div className="review-suggestion mt-5 rounded-lg border border-[#DADCE0] bg-white p-5"><p className="section-label">Possible follow-up</p><p className="mt-2 text-sm leading-6">{ai.followUp}</p></div>}
 
-      <details className="mt-5 rounded-lg border border-border bg-background p-4">
+      <details className="review-details mt-5 rounded-lg border border-border bg-background p-4">
         <summary className="cursor-pointer text-sm font-semibold">Show local answer check</summary>
         <div className="mt-4 grid gap-5 md:grid-cols-3"><FeedbackList title="Local strengths" items={evaluation.strengths} /><FeedbackList title="Local weaknesses" items={evaluation.weaknesses} /><FeedbackList title="Local missing elements" items={evaluation.missingElements} /></div>
       </details>
@@ -614,7 +621,7 @@ function EvaluationCard({ evaluation, question, answer, onNext, nextLabel = 'Nex
 
   const visibleScores = Object.entries(evaluation.scores).filter(([, v]) => typeof v === 'number') as [string, number][]
   return <section className="review-panel">
-    <div className="review-head"><div><p className="review-kicker">Answer review</p><div className="mt-2 flex items-end gap-2"><span className="review-score">{evaluation.overall}</span><span className="pb-1 text-sm font-semibold">/100</span></div><h3 className="mt-3 max-w-3xl text-xl font-semibold leading-8">{evaluation.summary}</h3></div><span className="review-source"><Brain className="size-4" /> Local analysis</span></div>
+    <div className="review-head"><div><p className="review-kicker">Practice score</p><div className="mt-2 flex items-end gap-2"><span className="review-score">{evaluation.overall}</span><span className="pb-1 text-sm font-semibold">/100</span></div><h3 className="mt-3 max-w-3xl text-xl font-semibold leading-8">{evaluation.summary}</h3></div><span className="review-source"><Brain className="size-4" /> Local analysis</span></div>
     <p className="report-context-note">This is an approximate keyword and structure check. It cannot verify relevance, factual accuracy or interview readiness; use it as a checklist, not a hiring score.</p>
     <details className="feedback-disclosure"><summary>Scores by criterion</summary><div className="report-metrics-grid">{visibleScores.map(([key, score]) => <ReportMetric key={key} label={getCompetencyLabel(key)} value={score} />)}</div></details>
     <div className="report-coaching-grid mt-6"><div className="report-coaching-panel report-positive"><FeedbackList title="What worked" items={evaluation.strengths} /></div><div className="report-coaching-panel report-improve"><FeedbackList title="Improve next" items={[...evaluation.weaknesses, ...evaluation.missingElements]} /></div></div>
@@ -1331,7 +1338,8 @@ function SpeechMetric({ label, value, note }: any) { return <div className="roun
 
 function SpeakingReview({ evaluation, metrics }: { evaluation: SpeakingEval; metrics: ReturnType<typeof getSpeakingMetrics> }) {
   const [open, setOpen] = useState(true)
-  return <><div className="review-ready"><div><strong>{evaluation.overall}/100</strong><span>Your speaking review is ready.</span></div><button className="btn-primary" onClick={() => setOpen(true)}>View speaking review</button></div><ReviewDialog open={open} onClose={() => setOpen(false)} title="Speaking review"><SpeakingEvaluation evaluation={evaluation} metrics={metrics} /></ReviewDialog></>
+  const trigger = useRef<HTMLButtonElement>(null)
+  return <><div className="review-ready"><div><strong>{evaluation.overall}/100</strong><span>Your speaking review is ready.</span></div><button ref={trigger} className="btn-primary" onClick={() => setOpen(true)}>View speaking review</button></div><ReviewDialog returnFocus={trigger} open={open} onClose={() => setOpen(false)} title="Speaking review"><SpeakingEvaluation evaluation={evaluation} metrics={metrics} /></ReviewDialog></>
 }
 
 function SpeakingEvaluation({ evaluation, metrics }: { evaluation: SpeakingEval; metrics: ReturnType<typeof getSpeakingMetrics> }) {
